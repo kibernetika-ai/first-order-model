@@ -1,0 +1,112 @@
+kind: MLApp
+metadata:
+  name: first-order-motion
+spec:
+  package_manager: "pip3"
+  packages:
+    - names:
+      {{- range $i, $value := .packages }}
+      - "{{ $value }}"
+      {{- end }}
+      manager: "pip3"
+  default_mount_path: "/notebooks"
+  tasks:
+  - name: demo
+    resources:
+    - name: worker
+      replicas: 1
+      restartPolicy: Never
+      maxRestartCount: 0
+      allowFail: true
+      images:
+        gpu: "kuberlab/pytorch:{{.pytorch_version.value}}-gpu"
+        cpu: "kuberlab/pytorch:{{.pytorch_version.value}}-cpu"
+      command: >-
+        python demo.py --config config/vox-256.yaml
+        --checkpoint $CHECKPOINTS_DIR/vox-cpk.pth.tar
+        --driving_video models/00.mp4
+        --source_image models/02.png
+        --result_video $TRAINING_DIR/result.mp4
+        --cpu
+      workdir: "$SRC_DIR"
+      resources:
+        accelerators:
+          gpu: 0
+        requests:
+          cpu: 100m
+          memory: 64Mi
+        limits:
+          cpu: 1000m
+          memory: 4Gi
+      default_volume_mapping: true
+  uix:
+  - name: jupyter
+    displayName: Jupyter
+    images:
+      gpu: "kuberlab/pytorch:{{.pytorch_version.value}}-gpu"
+      cpu: "kuberlab/pytorch:{{.pytorch_version.value}}-cpu"
+    resources:
+      accelerators:
+        gpu: 0
+      requests:
+        cpu: 100m
+        memory: 64Mi
+      limits:
+        cpu: 1000m
+        memory: 4Gi
+    ports:
+    - port: 8888
+      targetPort: 8888
+      protocol: TCP
+      name: http
+    default_volume_mapping: true
+  {{- if .tensorboard.value }}
+  - name: tensorboard
+    displayName: Tensorboard
+    command: "tensorboard --logdir=$TRAINING_DIR"
+    images:
+      gpu: "kuberlab/pytorch:{{.pytorch_version.value}}-gpu"
+      cpu: "kuberlab/pytorch:{{.pytorch_version.value}}-cpu"
+    ports:
+    - port: 6006
+      targetPort: 6006
+      protocol: TCP
+      name: http
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 1500m
+        memory: 4Gi
+    volumes:
+    - name: training
+  {{- end }}
+  volumes:
+  - name: training
+    clusterStorage: {{ .storage.value }}
+  - gitRepo:
+      repository: {{ gitRepo .src.value }}
+    name: src
+    subPath: {{ gitSubPath .src.value }}
+  - isLibDir: true
+    name: lib
+    clusterStorage: {{ .storage.value }}
+  - name: checkpoints
+    {{- if .dataset.value }}
+    datasetFS:
+      workspace: {{ .dataset.workspace }}
+      dataset: {{ .dataset.value }}
+      version: {{ .dataset.version }}
+    {{- else }}
+    clusterStorage: {{ .storage.value }}
+    {{- end }}
+  - mountPath: /notebooks
+    name: code
+    subPath: code
+    clusterStorage: {{ .storage.value }}
+  - mountPath: /dev/shm
+    name: shared
+    emptyDir:
+      sizeLimit: 8096Mi
+      medium: Memory

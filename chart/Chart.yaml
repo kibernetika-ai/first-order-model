@@ -1,0 +1,14 @@
+Description: First Order Motion Model for Image Animation
+Engine: gotpl
+Home: http://kuberlab.com
+Icon: https://storage.googleapis.com/kuberlab-images/torch-logo.png
+Keywords:
+- PyTorch
+- animation
+- DeepFake
+Maintainers:
+- Email: monstarnn@gmail.com
+  Name: Vadim Grishin
+Name: first-order-model
+Version: 1.0.0
+Type: mlapp-v2
