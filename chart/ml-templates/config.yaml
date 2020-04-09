@@ -34,10 +34,10 @@ spec:
         accelerators:
           gpu: 0
         requests:
-          cpu: 100m
-          memory: 64Mi
+          cpu: 2
+          memory: 2Gi
         limits:
-          cpu: 1000m
+          cpu: 4
           memory: 4Gi
       default_volume_mapping: true
   uix:
