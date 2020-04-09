@@ -39,6 +39,34 @@ spec:
           cpu: 4
           memory: 4Gi
       default_volume_mapping: true
+  - name: load_videos
+    resources:
+    - name: worker
+      replicas: 1
+      restartPolicy: Never
+      maxRestartCount: 0
+      allowFail: true
+      images:
+        gpu: "kuberlab/pytorch:{{.pytorch_version.value}}-gpu"
+        cpu: "kuberlab/pytorch:{{.pytorch_version.value}}-cpu"
+      command: >-
+        wget https://yt-dl.org/downloads/latest/youtube-dl -O youtube-dl;
+        chmod a+rx youtube-dl;
+        python data/taichi-loading/load_videos.py
+        --video_folder $DATA_DIR/youtube-taichi
+        --metadata data/taichi-loading/taichi-metadata.csv
+        --out_folder $DATA_DIR/taichi-png
+      workdir: "$SRC_DIR"
+      resources:
+        accelerators:
+          gpu: 0
+        requests:
+          cpu: 500m
+          memory: 512Mi
+        limits:
+          cpu: 2
+          memory: 4Gi
+      default_volume_mapping: true
   uix:
   - name: jupyter
     displayName: Jupyter
@@ -84,6 +112,8 @@ spec:
   {{- end }}
   volumes:
   - name: training
+    clusterStorage: {{ .storage.value }}
+  - name: data
     clusterStorage: {{ .storage.value }}
   - gitRepo:
       repository: {{ gitRepo .src.value }}
