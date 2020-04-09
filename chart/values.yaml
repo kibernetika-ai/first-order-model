@@ -25,13 +25,15 @@ src:
     name: "Source Code"
     kind: git
 
-dataset:
+models:
  value: 'first-order-motion'
  version: '1.0.0'
  workspace: 'kuberlab-demo'
  wizard:
-   name: "First Order Motion Checkpoints"
-   kind: dataset
+   name: "First Order Motion Model"
+   kind: model
 
 # Pip packages may be specified here in format that pip accepts.
-packages: []
+packages:
+  - "imageio-ffmpeg==0.4.1"
+  - "tqdm==4.24.0"

@@ -22,10 +22,11 @@ spec:
         gpu: "kuberlab/pytorch:{{.pytorch_version.value}}-gpu"
         cpu: "kuberlab/pytorch:{{.pytorch_version.value}}-cpu"
       command: >-
-        python demo.py --config config/vox-256.yaml
-        --checkpoint $CHECKPOINTS_DIR/vox-cpk.pth.tar
-        --driving_video models/00.mp4
-        --source_image models/02.png
+        python demo.py
+        --config config/vox-256.yaml
+        --checkpoint $MODELS_DIR/vox-cpk.pth.tar
+        --driving_video $MODELS_DIR/samples/04.mp4
+        --source_image $MODELS_DIR/samples/02.png
         --result_video $TRAINING_DIR/result.mp4
         --cpu
       workdir: "$SRC_DIR"
@@ -92,12 +93,12 @@ spec:
   - isLibDir: true
     name: lib
     clusterStorage: {{ .storage.value }}
-  - name: checkpoints
-    {{- if .dataset.value }}
-    datasetFS:
-      workspace: {{ .dataset.workspace }}
-      dataset: {{ .dataset.value }}
-      version: {{ .dataset.version }}
+  - name: models
+    {{- if .models.value }}
+    model:
+      workspace: {{ .models.workspace }}
+      dataset: {{ .models.value }}
+      version: {{ .models.version }}
     {{- else }}
     clusterStorage: {{ .storage.value }}
     {{- end }}
