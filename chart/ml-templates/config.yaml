@@ -31,7 +31,7 @@ spec:
       workdir: "$SRC_DIR"
       resources:
         accelerators:
-          gpu: 0
+          gpu: 1
         requests:
           cpu: 2
           memory: 2Gi
@@ -65,6 +65,31 @@ spec:
           memory: 512Mi
         limits:
           cpu: 2
+          memory: 4Gi
+      default_volume_mapping: true
+  - name: train
+    resources:
+    - name: worker
+      replicas: 1
+      restartPolicy: Never
+      maxRestartCount: 0
+      allowFail: true
+      images:
+        gpu: "kuberlab/pytorch:{{.pytorch_version.value}}-gpu"
+        cpu: "kuberlab/pytorch:{{.pytorch_version.value}}-cpu"
+      command: >-
+        python run.py
+        --config config/taichi-256.yaml
+        --log_dir $TRAINING_DIR
+      workdir: "$SRC_DIR"
+      resources:
+        accelerators:
+          gpu: 1
+        requests:
+          cpu: 2
+          memory: 2Gi
+        limits:
+          cpu: 4
           memory: 4Gi
       default_volume_mapping: true
   uix:
