@@ -1,5 +1,5 @@
 dataset_params:
-  root_dir: data/moving-gif
+  root_dir: moving-gif
   frame_shape: [256, 256, 3]
   id_sampling: False
   augmentation_params:
