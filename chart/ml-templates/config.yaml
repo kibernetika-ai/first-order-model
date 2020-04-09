@@ -28,7 +28,6 @@ spec:
         --driving_video $MODELS_DIR/samples/04.mp4
         --source_image $MODELS_DIR/samples/02.png
         --result_video $TRAINING_DIR/result.mp4
-        --cpu
       workdir: "$SRC_DIR"
       resources:
         accelerators:
