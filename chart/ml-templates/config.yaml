@@ -33,10 +33,10 @@ spec:
         accelerators:
           gpu: 1
         requests:
-          cpu: 2
+          cpu: 500mi
           memory: 2Gi
         limits:
-          cpu: 4
+          cpu: 2
           memory: 4Gi
       default_volume_mapping: true
   - name: load_videos
