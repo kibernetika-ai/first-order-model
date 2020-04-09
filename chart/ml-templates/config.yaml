@@ -97,7 +97,7 @@ spec:
     {{- if .models.value }}
     model:
       workspace: {{ .models.workspace }}
-      dataset: {{ .models.value }}
+      model: {{ .models.value }}
       version: {{ .models.version }}
     {{- else }}
     clusterStorage: {{ .storage.value }}
