@@ -37,3 +37,4 @@ models:
 packages:
   - "imageio-ffmpeg==0.4.1"
   - "tqdm==4.24.0"
+  - "Pillow==5.2.0"
