@@ -109,7 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--relative", dest="relative", action="store_true", help="use relative or absolute keypoint coordinates")
     parser.add_argument("--adapt_scale", dest="adapt_scale", action="store_true", help="adapt movement scale based on convex hull of keypoints")
 
-    parser.add_argument("--cpu", dest="cpu", action="store_true", help="CPU only (no CUDA used)")
+    parser.add_argument("--cpu", dest="cpu", action="store_true", help="Force CPU usage (no CUDA used)")
 
     parser.add_argument("--find_best_frame", dest="find_best_frame", action="store_true",
                         help="Generate from the frame that is the most alligned with source. (Only for faces, requires face_aligment lib)")
@@ -122,6 +122,8 @@ if __name__ == "__main__":
 
     opt = parser.parse_args()
 
+    cpu = not torch.cuda.is_available() or opt.cpu
+
     source_image = imageio.imread(opt.source_image)
     reader = imageio.get_reader(opt.driving_video)
     fps = reader.get_meta_data()['fps']
@@ -130,17 +132,17 @@ if __name__ == "__main__":
 
     source_image = resize(source_image, (256, 256))[..., :3]
     driving_video = [resize(frame, (256, 256))[..., :3] for frame in driving_video]
-    generator, kp_detector = load_checkpoints(config_path=opt.config, checkpoint_path=opt.checkpoint, cpu=opt.cpu)
+    generator, kp_detector = load_checkpoints(config_path=opt.config, checkpoint_path=opt.checkpoint, cpu=cpu)
 
     if opt.find_best_frame or opt.best_frame is not None:
         i = opt.best_frame if opt.best_frame is not None else find_best_frame(source_image, driving_video)
         print (i)
         driving_forward = driving_video[i:]
         driving_backward = driving_video[:(i+1)][::-1]
-        predictions_forward = make_animation(source_image, driving_forward, generator, kp_detector, relative=opt.relative, adapt_movement_scale=opt.adapt_scale, cpu=opt.cpu)
-        predictions_backward = make_animation(source_image, driving_backward, generator, kp_detector, relative=opt.relative, adapt_movement_scale=opt.adapt_scale, cpu=opt.cpu)
+        predictions_forward = make_animation(source_image, driving_forward, generator, kp_detector, relative=opt.relative, adapt_movement_scale=opt.adapt_scale, cpu=cpu)
+        predictions_backward = make_animation(source_image, driving_backward, generator, kp_detector, relative=opt.relative, adapt_movement_scale=opt.adapt_scale, cpu=cpu)
         predictions = predictions_backward[::-1] + predictions_forward[1:]
     else:
-        predictions = make_animation(source_image, driving_video, generator, kp_detector, relative=opt.relative, adapt_movement_scale=opt.adapt_scale, cpu=opt.cpu)
+        predictions = make_animation(source_image, driving_video, generator, kp_detector, relative=opt.relative, adapt_movement_scale=opt.adapt_scale, cpu=cpu)
     imageio.mimsave(opt.result_video, predictions, fps=fps)
 

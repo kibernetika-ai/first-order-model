@@ -62,10 +62,15 @@ class FramesDataset(Dataset):
 
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
                  random_seed=0, pairs_list=None, augmentation_params=None):
-        self.root_dir = root_dir
+        data_dir = os.environ.get("DATA_DIR")
+        root_dir = os.path.join(data_dir, root_dir)
+        self.root_dir = os.path.join(root_dir)
         self.videos = os.listdir(root_dir)
         self.frame_shape = tuple(frame_shape)
-        self.pairs_list = pairs_list
+        if pairs_list:
+            self.pairs_list = os.path.join(data_dir, pairs_list)
+        else:
+            pairs_list = None
         self.id_sampling = id_sampling
         if os.path.exists(os.path.join(root_dir, 'train')):
             assert os.path.exists(os.path.join(root_dir, 'test'))

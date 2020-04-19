@@ -22,21 +22,74 @@ spec:
         gpu: "kuberlab/pytorch:{{.pytorch_version.value}}-gpu"
         cpu: "kuberlab/pytorch:{{.pytorch_version.value}}-cpu"
       command: >-
-        python demo.py --config config/vox-256.yaml
-        --checkpoint $CHECKPOINTS_DIR/vox-cpk.pth.tar
-        --driving_video models/00.mp4
-        --source_image models/02.png
+        python demo.py
+        --config config/vox-256.yaml
+        --checkpoint $MODELS_DIR/vox-cpk.pth.tar
+        --driving_video $MODELS_DIR/samples/04.mp4
+        --source_image $MODELS_DIR/samples/02.png
         --result_video $TRAINING_DIR/result.mp4
-        --cpu
+      workdir: "$SRC_DIR"
+      resources:
+        accelerators:
+          gpu: 1
+        requests:
+          cpu: 500mi
+          memory: 2Gi
+        limits:
+          cpu: 2
+          memory: 4Gi
+      default_volume_mapping: true
+  - name: load_videos
+    resources:
+    - name: worker
+      replicas: 1
+      restartPolicy: Never
+      maxRestartCount: 0
+      allowFail: true
+      images:
+        gpu: "kuberlab/pytorch:{{.pytorch_version.value}}-gpu"
+        cpu: "kuberlab/pytorch:{{.pytorch_version.value}}-cpu"
+      command: >-
+        wget https://yt-dl.org/downloads/latest/youtube-dl -O youtube-dl;
+        chmod a+rx youtube-dl;
+        python data/taichi-loading/load_videos.py
+        --video_folder $DATA_DIR/youtube-taichi
+        --metadata data/taichi-loading/taichi-metadata.csv
+        --out_folder $DATA_DIR/taichi-png
       workdir: "$SRC_DIR"
       resources:
         accelerators:
           gpu: 0
         requests:
-          cpu: 100m
-          memory: 64Mi
+          cpu: 500m
+          memory: 512Mi
         limits:
-          cpu: 1000m
+          cpu: 2
+          memory: 4Gi
+      default_volume_mapping: true
+  - name: train
+    resources:
+    - name: worker
+      replicas: 1
+      restartPolicy: Never
+      maxRestartCount: 0
+      allowFail: true
+      images:
+        gpu: "kuberlab/pytorch:{{.pytorch_version.value}}-gpu"
+        cpu: "kuberlab/pytorch:{{.pytorch_version.value}}-cpu"
+      command: >-
+        python run.py
+        --config config/taichi-256.yaml
+        --log_dir $TRAINING_DIR
+      workdir: "$SRC_DIR"
+      resources:
+        accelerators:
+          gpu: 1
+        requests:
+          cpu: 2
+          memory: 2Gi
+        limits:
+          cpu: 4
           memory: 4Gi
       default_volume_mapping: true
   uix:
@@ -85,6 +138,8 @@ spec:
   volumes:
   - name: training
     clusterStorage: {{ .storage.value }}
+  - name: data
+    clusterStorage: {{ .storage.value }}
   - gitRepo:
       repository: {{ gitRepo .src.value }}
     name: src
@@ -92,12 +147,12 @@ spec:
   - isLibDir: true
     name: lib
     clusterStorage: {{ .storage.value }}
-  - name: checkpoints
-    {{- if .dataset.value }}
-    datasetFS:
-      workspace: {{ .dataset.workspace }}
-      dataset: {{ .dataset.value }}
-      version: {{ .dataset.version }}
+  - name: models
+    {{- if .models.value }}
+    model:
+      workspace: {{ .models.workspace }}
+      model: {{ .models.value }}
+      version: {{ .models.version }}
     {{- else }}
     clusterStorage: {{ .storage.value }}
     {{- end }}
