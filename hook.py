@@ -81,7 +81,7 @@ class Worker:
 
             kp_norm = normalize_kp(kp_source=self.kp_source, kp_driving=kp_driving,
                                    kp_driving_initial=self.kp_driving_initial, use_relative_movement=True,
-                                   use_relative_jacobian=True, adapt_movement_scale=False)
+                                   use_relative_jacobian=True, adapt_movement_scale=True)
             out = generator(self.source, kp_source=self.kp_source, kp_driving=kp_norm)
 
             p = np.transpose(out['prediction'].data.cpu().numpy(), [0, 2, 3, 1])[0]
