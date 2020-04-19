@@ -61,7 +61,7 @@ class Worker:
             spm = torch.tensor(img[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
             self.source = spm.cpu() if is_cpu else spm.cuda()
             self.kp_source = kp_detector(self.source)
-            self.kp_driving_initial = self.kp_source
+            self.kp_driving_initial = None
 
     def process(self, frame):
         with torch.no_grad():
@@ -74,11 +74,14 @@ class Worker:
             frame = resize(frame, (256, 256))[..., :3]
             frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
 
+            if self.kp_driving_initial is None:
+                self.kp_driving_initial = kp_detector(frame)
+
             kp_driving = kp_detector(frame)
 
             kp_norm = normalize_kp(kp_source=self.kp_source, kp_driving=kp_driving,
                                    kp_driving_initial=self.kp_driving_initial, use_relative_movement=True,
-                                   use_relative_jacobian=True, adapt_movement_scale=True)
+                                   use_relative_jacobian=True, adapt_movement_scale=False)
             out = generator(self.source, kp_source=self.kp_source, kp_driving=kp_norm)
 
             p = np.transpose(out['prediction'].data.cpu().numpy(), [0, 2, 3, 1])[0]
@@ -115,7 +118,6 @@ def on_complete(meta, _):
 def process(inputs, ctx, **kwargs):
     frame, is_video = helpers.load_image(inputs, 'image')
     key = kwargs.get('metadata', {}).get('stream_id', None)
-    logging.info('Key: {}'.format(key))
     if key is None:
         return {'output': frame}
     track = trackers.get(key, None)
