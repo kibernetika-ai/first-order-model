@@ -117,6 +117,9 @@ def on_complete(meta, _):
 
 def process(inputs, ctx, **kwargs):
     frame, is_video = helpers.load_image(inputs, 'image')
+    frame = cv2.resize(frame,(256,256))
+    if frame is not None:
+        return frame
     key = kwargs.get('metadata', {}).get('stream_id', None)
     if key is None:
         return {'output': frame}
