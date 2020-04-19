@@ -94,7 +94,7 @@ def init_hook(**params):
     LOG.info(params)
     global generator, kp_detector, is_cpu, source_image
     logging.info('GPU_COUNT: {}'.format(os.environ.get('GPU_COUNT', 0)))
-    is_cpu = True if os.environ.get('GPU_COUNT', 0) == 0 else False
+    is_cpu = True if int(os.environ.get('GPU_COUNT', 0)) == 0 else False
     source_image = imageio.imread(params.get('source', './backgrounds/images/10000.png'))
     generator, kp_detector = load_checkpoints(config_path=params.get('config'),
                                               checkpoint_path=params.get('checkpoint'), cpu=is_cpu)
