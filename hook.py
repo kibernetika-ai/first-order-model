@@ -115,6 +115,7 @@ def on_complete(meta, _):
 def process(inputs, ctx, **kwargs):
     frame, is_video = helpers.load_image(inputs, 'image')
     key = kwargs.get('metadata', {}).get('stream_id', None)
+    logging.info('Key: {}'.format(key))
     if key is None:
         return {'output': frame}
     track = trackers.get(key, None)
