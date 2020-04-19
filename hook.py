@@ -74,7 +74,7 @@ class Worker:
             frame = resize(frame, (256, 256))[..., :3]
             if self.count < 100:
                 self.count += 1
-                return frame
+                return (frame*255).astype(np.uint8)
             frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
             if self.kp_driving_initial is None:
                 self.kp_driving_initial = kp_detector(frame)
