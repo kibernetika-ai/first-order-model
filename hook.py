@@ -75,9 +75,6 @@ class Worker:
             frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
             if self.kp_driving_initial is None:
                 self.kp_driving_initial = kp_detector(frame)
-            else:
-                if self.count % 180 == 0:
-                    self.kp_driving_initial = kp_detector(frame)
 
             kp_driving = kp_detector(frame)
 
