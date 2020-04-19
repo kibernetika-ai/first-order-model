@@ -73,6 +73,7 @@ class Worker:
             frame = frame[starty:starty + min_dim, startx:startx + min_dim, :]
             frame = resize(frame, (256, 256))[..., :3]
             if self.count<60:
+                self.count+=1
                 return frame
             frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
             if self.kp_driving_initial is None:
