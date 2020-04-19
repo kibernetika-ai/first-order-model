@@ -71,15 +71,11 @@ class Worker:
             startx = x // 2 - (min_dim // 2)
             starty = y // 2 - (min_dim // 2)
             frame = frame[starty:starty + min_dim, startx:startx + min_dim, :]
-            if self.kp_driving_initial is None:
-                if cv2.Laplacian(frame, cv2.CV_64F).var() > 100:
-                    self.kp_driving_initial = kp_detector(frame)
-                else:
-                    return frame
-
+            frame = frame.astype(np.float32)/255
             frame = resize(frame, (256, 256))[..., :3]
             frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
-
+            if self.kp_driving_initial is None:
+                self.kp_driving_initial = kp_detector(frame)
 
 
             kp_driving = kp_detector(frame)
