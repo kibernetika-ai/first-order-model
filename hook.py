@@ -71,12 +71,12 @@ class Worker:
             startx = x // 2 - (min_dim // 2)
             starty = y // 2 - (min_dim // 2)
             frame = frame[starty:starty + min_dim, startx:startx + min_dim, :]
-            frame = resize(frame, (256, 256))[..., :3]
             frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
-            if self.kp_driving_initial is None:
-                self.kp_driving_initial = kp_detector(frame)
+
 
             kp_driving = kp_detector(frame)
+            if self.kp_driving_initial is None:
+                self.kp_driving_initial = kp_driving
 
             kp_norm = normalize_kp(kp_source=self.kp_source, kp_driving=kp_driving,
                                    kp_driving_initial=self.kp_driving_initial, use_relative_movement=True,
@@ -118,8 +118,8 @@ def on_complete(meta, _):
 def process(inputs, ctx, **kwargs):
     frame, is_video = helpers.load_image(inputs, 'image')
     frame = cv2.resize(frame, (256, 256))
-    if frame is not None:
-        return {'output': frame}
+    #if frame is not None:
+    #    return {'output': frame}
     key = kwargs.get('metadata', {}).get('stream_id', None)
     if key is None:
         return {'output': frame}
