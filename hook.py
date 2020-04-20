@@ -95,7 +95,7 @@ class Worker:
 
             p = np.transpose(out['prediction'].data.cpu().numpy(), [0, 2, 3, 1])[0]
 
-            p = np.concatenate([vframe,p],axis=1)
+            p = np.concatenate([vframe[:,:,::-1],p],axis=1)
             p = p * 255
             p = p.astype(np.uint8)
             p = cv2.cvtColor(p, cv2.COLOR_BGR2RGB)
