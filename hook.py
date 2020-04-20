@@ -120,7 +120,7 @@ def process(inputs, ctx, **kwargs):
     frame = cv2.resize(frame, (256, 256))
     #if frame is not None:
     #    return {'output': frame}
-    key = kwargs.get('metadata', {}).get('stream_id', None)
+    key = '1'#kwargs.get('metadata', {}).get('stream_id', None)
     if key is None:
         return {'output': frame}
     track = trackers.get(key, None)
@@ -128,4 +128,4 @@ def process(inputs, ctx, **kwargs):
         track = Worker(source_image)
         trackers[key] = track
     frame = track.process(frame)
-    return {'output': frame}
+    return {'output': frame[:,:,::-1]}
