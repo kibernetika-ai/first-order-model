@@ -75,8 +75,7 @@ if __name__ == "__main__":
         spm = torch.tensor(source_image[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
         source = spm.cpu() if opt.cpu else spm.cuda()
         kp_source = kp_detector(source)
-        if kp_driving_initial is None:
-            kp_driving_initial = kp_source
+
 
         video = cv2.VideoCapture(0)
 
@@ -99,6 +98,8 @@ if __name__ == "__main__":
             frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
 
             kp_driving = kp_detector(frame)
+            if kp_driving_initial is None:
+                kp_driving_initial = kp_driving
 
             kp_norm = normalize_kp(kp_source=kp_source, kp_driving=kp_driving,
                                    kp_driving_initial=kp_driving_initial, use_relative_movement=opt.relative,
