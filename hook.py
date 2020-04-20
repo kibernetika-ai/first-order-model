@@ -39,8 +39,8 @@ def load_checkpoints(config_path, checkpoint_path, cpu=False):
     generator.load_state_dict(checkpoint['generator'])
     kp_detector.load_state_dict(checkpoint['kp_detector'])
 
-    generator = DataParallelWithCallback(generator)
-    kp_detector = DataParallelWithCallback(kp_detector)
+    #generator = DataParallelWithCallback(generator)
+    #kp_detector = DataParallelWithCallback(kp_detector)
 
     generator.eval()
     kp_detector.eval()
@@ -66,11 +66,11 @@ class Worker:
 
     def process(self, frame):
         with torch.no_grad():
-            #y, x, _ = frame.shape
-            #min_dim = min(y, x)
-            #startx = x // 2 - (min_dim // 2)
-            #starty = y // 2 - (min_dim // 2)
-            #frame = frame[starty:starty + min_dim, startx:startx + min_dim, :]
+            y, x, _ = frame.shape
+            min_dim = min(y, x)
+            startx = x // 2 - (min_dim // 2)
+            starty = y // 2 - (min_dim // 2)
+            frame = frame[starty:starty + min_dim, startx:startx + min_dim, :]
             frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
 
 
@@ -114,22 +114,13 @@ def on_complete(meta, _):
         if t is not None:
             del trackers[key]
 
-def crop(img, p=0.7):
-    h, w = img.shape[:2]
-    x = int(min(w, h) * p)
-    l = (w - x) // 2
-    r = w - l
-    u = (h - x) // 2
-    d = h - u
-    return img[u:d, l:r], (l,r,u,d)
 
 def process(inputs, ctx, **kwargs):
     frame, is_video = helpers.load_image(inputs, 'image')
-    frame,_ = crop(frame,p=1)
     frame = cv2.resize(frame, (256, 256))
     #if frame is not None:
     #    return {'output': frame}
-    key = '1'#kwargs.get('metadata', {}).get('stream_id', None)
+    key = kwargs.get('metadata', {}).get('stream_id', None)
     if key is None:
         return {'output': frame}
     track = trackers.get(key, None)
