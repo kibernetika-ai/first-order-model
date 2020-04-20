@@ -66,11 +66,11 @@ class Worker:
 
     def process(self, frame):
         with torch.no_grad():
-            y, x, _ = frame.shape
-            min_dim = min(y, x)
-            startx = x // 2 - (min_dim // 2)
-            starty = y // 2 - (min_dim // 2)
-            frame = frame[starty:starty + min_dim, startx:startx + min_dim, :]
+            #y, x, _ = frame.shape
+            #min_dim = min(y, x)
+            #startx = x // 2 - (min_dim // 2)
+            #starty = y // 2 - (min_dim // 2)
+            #frame = frame[starty:starty + min_dim, startx:startx + min_dim, :]
             frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
 
 
