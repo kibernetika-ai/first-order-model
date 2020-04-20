@@ -64,15 +64,15 @@ class Worker:
             self.kp_driving_initial = None
             self.count = 0
 
-    def process(self, frame):
+    def process(self, vframe):
         with torch.no_grad():
-            y, x, _ = frame.shape
+            y, x, _ = vframe.shape
             min_dim = min(y, x)
             startx = x // 2 - (min_dim // 2)
             starty = y // 2 - (min_dim // 2)
-            frame = frame[starty:starty + min_dim, startx:startx + min_dim, :]
-            frame = resize(frame, (256, 256))[..., :3]
-            frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
+            vframe = vframe[starty:starty + min_dim, startx:startx + min_dim, :]
+            vframe = resize(vframe, (256, 256))[..., :3]
+            frame = torch.tensor(vframe[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
 
 
             kp_driving = kp_detector(frame)
@@ -86,6 +86,7 @@ class Worker:
 
             p = np.transpose(out['prediction'].data.cpu().numpy(), [0, 2, 3, 1])[0]
 
+            p = np.concatenate([vframe,p],axis=1)
             p = p * 255
             p = p.astype(np.uint8)
             p = cv2.cvtColor(p, cv2.COLOR_BGR2RGB)
