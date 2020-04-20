@@ -75,7 +75,7 @@ class Worker:
             vframe = resize(vframe, (256, 256))[..., :3]
             if self.count<60:
                 self.count += 1
-                p = np.concatenate([vframe, self.img], axis=1)
+                p = np.concatenate([vframe[:,:,::-1], self.img], axis=1)
                 p = p * 255
                 p = p.astype(np.uint8)
                 p = cv2.cvtColor(p, cv2.COLOR_BGR2RGB)
