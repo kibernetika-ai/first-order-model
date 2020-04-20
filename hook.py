@@ -56,9 +56,9 @@ source_image = None
 
 class Worker:
     def __init__(self, img_orig):
-        img = resize(img_orig, (256, 256))[..., :3]
+        self.img = resize(img_orig, (256, 256))[..., :3]
         with torch.no_grad():
-            spm = torch.tensor(img[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
+            spm = torch.tensor(self.img[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
             self.source = spm.cpu() if is_cpu else spm.cuda()
             self.kp_source = kp_detector(self.source)
             self.kp_driving_initial = None
