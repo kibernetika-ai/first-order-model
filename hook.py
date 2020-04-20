@@ -127,13 +127,14 @@ def process(inputs, ctx, **kwargs):
     frame, is_video = helpers.load_image(inputs, 'image')
     frame,_ = crop(frame,p=1)
     frame = cv2.resize(frame, (256, 256))
-    if frame is not None:
-        return {'output': frame}
+    #if frame is not None:
+    #    return {'output': frame}
     key = '1'#kwargs.get('metadata', {}).get('stream_id', None)
     if key is None:
         return {'output': frame}
     track = trackers.get(key, None)
     if track is None:
+        logging.info('NEW TRACK: {}'.format(key))
         track = Worker(source_image)
         trackers[key] = track
     frame = track.process(frame)
