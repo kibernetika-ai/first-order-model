@@ -64,6 +64,7 @@ class Worker:
             self.kp_driving_initial = None
             self.count = 0
 
+
     def process(self, vframe):
         with torch.no_grad():
             y, x, _ = vframe.shape
@@ -72,6 +73,14 @@ class Worker:
             starty = y // 2 - (min_dim // 2)
             vframe = vframe[starty:starty + min_dim, startx:startx + min_dim, :]
             vframe = resize(vframe, (256, 256))[..., :3]
+            if self.count<60:
+                self.count += 1
+                p = np.concatenate([vframe, self.img], axis=1)
+                p = p * 255
+                p = p.astype(np.uint8)
+                p = cv2.cvtColor(p, cv2.COLOR_BGR2RGB)
+                return p
+
             frame = torch.tensor(vframe[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
 
 
@@ -130,4 +139,4 @@ def process(inputs, ctx, **kwargs):
         track = Worker(source_image)
         trackers[key] = track
     frame = track.process(frame)
-    return {'output': frame[:,:,::-1]}
+    return {'output': frame[:,:,:]}
