@@ -114,9 +114,18 @@ def on_complete(meta, _):
         if t is not None:
             del trackers[key]
 
+def crop(img, p=0.7):
+    h, w = img.shape[:2]
+    x = int(min(w, h) * p)
+    l = (w - x) // 2
+    r = w - l
+    u = (h - x) // 2
+    d = h - u
+    return img[u:d, l:r], (l,r,u,d)
 
 def process(inputs, ctx, **kwargs):
     frame, is_video = helpers.load_image(inputs, 'image')
+    frame,_ = crop(frame,p=1)
     frame = cv2.resize(frame, (256, 256))
     if frame is not None:
         return {'output': frame}
