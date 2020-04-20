@@ -39,8 +39,8 @@ def load_checkpoints(config_path, checkpoint_path, cpu=False):
     generator.load_state_dict(checkpoint['generator'])
     kp_detector.load_state_dict(checkpoint['kp_detector'])
 
-    #generator = DataParallelWithCallback(generator)
-    #kp_detector = DataParallelWithCallback(kp_detector)
+    generator = DataParallelWithCallback(generator)
+    kp_detector = DataParallelWithCallback(kp_detector)
 
     generator.eval()
     kp_detector.eval()
@@ -71,6 +71,7 @@ class Worker:
             startx = x // 2 - (min_dim // 2)
             starty = y // 2 - (min_dim // 2)
             frame = frame[starty:starty + min_dim, startx:startx + min_dim, :]
+            frame = resize(frame, (256, 256))[..., :3]
             frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
 
 
@@ -117,7 +118,6 @@ def on_complete(meta, _):
 
 def process(inputs, ctx, **kwargs):
     frame, is_video = helpers.load_image(inputs, 'image')
-    frame = cv2.resize(frame, (256, 256))
     #if frame is not None:
     #    return {'output': frame}
     key = kwargs.get('metadata', {}).get('stream_id', None)
