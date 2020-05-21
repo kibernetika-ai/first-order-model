@@ -9,6 +9,7 @@ import numpy as np
 from skimage.transform import resize
 import requests
 import logging
+import time
 
 
 LOG = logging.getLogger(__name__)
@@ -58,11 +59,15 @@ def headers(token):
     return ret
 
 def fetch_task(opt):
-    resp = requests.get(opt.master+f'/servings/{opt.id}/task', headers=headers(opt.token))
-    if resp.status_code != 200:
-        LOG.error("Response {}".format(resp.text))
-        raise Exception('Failed fetch task')
-    return resp.json()
+    while True:
+        resp = requests.get(opt.master+f'/servings/{opt.id}/task', headers=headers(opt.token))
+        if resp.status_code != 404:
+            time.sleep(5)
+            continue
+        if resp.status_code != 200:
+            LOG.error("Response {}".format(resp.text))
+            raise Exception('Failed fetch task')
+        return resp.json()
 
 def process(opt, generator, kp_detector):
     while True:
