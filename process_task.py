@@ -94,12 +94,10 @@ def process(opt, generator, kp_detector):
 
         try:
             task_dir, img, video = check_task(task)
-            LOG.error(f"Processing task {task_id}...")
             out_file = os.path.join(opt.dst_dir, task_dir, "result", "result.mp4")
             video = os.path.join(opt.src_dir, video)
             img = os.path.join(opt.src_dir, img)
             img = imageio.imread(img)
-            LOG.error("Go!")
             process_task(task_id, opt, img, video, out_file, generator, kp_detector)
 
         except Exception as e:
@@ -124,9 +122,11 @@ def check_task(task):
 
 
 def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_detector):
+    LOG.error(f"Processing task {task_id}...")
     img = resize(img_orig, (256, 256))[..., :3]
     kp_driving_initial = None
     with torch.no_grad():
+        LOG.error("chckp1")
         spm = torch.tensor(img[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
         source = spm.cpu() if opt.cpu else spm.cuda()
         kp_source = kp_detector(source)
@@ -138,6 +138,7 @@ def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_det
         frames_count = int(cv2.VideoCapture.get(video, cv2.CAP_PROP_FRAME_COUNT))
         frame_counter = 0
         last_percent = 0
+        LOG.error("chckp2")
 
         while True:
             frame_img = video.read()
@@ -146,6 +147,8 @@ def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_det
             if frame_img is None:
                 print("Oops frame is None. Possibly camera or display does not work")
                 break
+
+            LOG.error("chckp3", frame_img.shape)
 
             # frame_img = cv2.rotate(frame_img,cv2.ROTATE_180)
             frame_img = cv2.cvtColor(frame_img, cv2.COLOR_BGR2RGB)
@@ -181,12 +184,16 @@ def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_det
             p = cv2.cvtColor(p, cv2.COLOR_BGR2RGB)
             vout.write(p)
 
+            LOG.error("chckp4")
+
             frame_counter += 1
 
             percent = int(frame_counter / frames_count * 100)
             if percent != last_percent:
                 last_percent = percent
                 send_status(opt, task_id, percent=min(100, percent))
+
+        LOG.error("chckp5")
 
         video.release()
         vout.release()
