@@ -180,7 +180,7 @@ class OpenGLView(QGLWidget):
         avg_move = None
         avg_index = 0
         count_avg = 0
-        mc = 3
+        mc = 2
 
         while True:
             ret, frame_in = cam.read()

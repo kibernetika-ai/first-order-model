@@ -10,6 +10,7 @@ from skimage.transform import resize
 import requests
 import logging
 import time
+import os
 
 
 LOG = logging.getLogger(__name__)
@@ -69,6 +70,12 @@ def fetch_task(opt):
             raise Exception('Failed fetch task')
         return resp.json()
 
+def push_status(task_id,status,opt):
+
+    resp = requests.post(opt.master+f'/tasks/{task_id}',headers=headers(opt.token),json=)
+    if resp.status_code != 200:
+        LOG.error("Failed update task {}".format(resp.text))
+
 def process(opt, generator, kp_detector):
     while True:
         #{'task_id': 'f548a28e-70ec-4756-aaad-ba8cf6ba6baa', 'percent': 0, 'state': 'executing', 'params': {
@@ -77,10 +84,27 @@ def process(opt, generator, kp_detector):
         #    'src': {'filename': 'BB398819-0799-487A-829B-DD5D0C7449F7/f548a28e-70ec-4756-aaad-ba8cf6ba6baa/src.mov',
         #            'name': 'source.mov'}}}
         task = fetch_task(opt)
-        LOG.info("Got task: {}".format(task))
+        params = task.get('params',{})
+        task_id = task.get('task_id','')
+        if task_id == '':
+            LOG.error('Got empty task id')
+            return
+        img = params.get('dst',{}).get('filename','')
+        if img == '':
+            LOG.error('Got empty dest image')
+            return
+        out_file = os.path.join(opt.dst_dir,os.path.dirname(img),'result.mp4')
+        video = params.get('src', {}).get('filename', '')
+        if video == '':
+            LOG.error('Got empty src video')
+            return
+        video = os.path.join(opt.src_dir, video)
+        img = os.path.join(opt.src_dir,img)
+        img = imageio.imread(img)
+        process_task(task_id,opt,img,video,out_file,generator,kp_detector)
 
 
-def process_task(opt,img_orig, generator, kp_detector):
+def process_task(task_id,opt,img_orig,video_file,out_file,generator, kp_detector):
     img = resize(img_orig, (256, 256))[..., :3]
     kp_driving_initial = None
     with torch.no_grad():
@@ -88,10 +112,10 @@ def process_task(opt,img_orig, generator, kp_detector):
         source = spm.cpu() if opt.cpu else spm.cuda()
         kp_source = kp_detector(source)
 
-        video = cv2.VideoCapture(opt.video)
+        video = cv2.VideoCapture(video_file)
         fps = video.get(cv2.CAP_PROP_FPS)
         fourcc = cv2.VideoWriter_fourcc(*'avc1')
-        vout = cv2.VideoWriter(opt.out, fourcc, fps, (256, 256))
+        vout = cv2.VideoWriter(out_file, fourcc, fps, (256, 256))
         while True:
             frame_img = video.read()
             if isinstance(frame_img, tuple):
