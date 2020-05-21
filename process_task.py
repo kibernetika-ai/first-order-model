@@ -71,6 +71,11 @@ def fetch_task(opt):
 
 def process(opt, generator, kp_detector):
     while True:
+        #{'task_id': 'f548a28e-70ec-4756-aaad-ba8cf6ba6baa', 'percent': 0, 'state': 'executing', 'params': {
+        #    'dst': {'filename': 'BB398819-0799-487A-829B-DD5D0C7449F7/f548a28e-70ec-4756-aaad-ba8cf6ba6baa/dst.jpg',
+        #            'name': 'dst.jpg'},
+        #    'src': {'filename': 'BB398819-0799-487A-829B-DD5D0C7449F7/f548a28e-70ec-4756-aaad-ba8cf6ba6baa/src.mov',
+        #            'name': 'source.mov'}}}
         task = fetch_task(opt)
         LOG.info("Got task: {}".format(task))
 
