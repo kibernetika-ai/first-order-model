@@ -236,9 +236,11 @@ def main():
     parser.set_defaults(adapt_scale=False)
 
     opt = parser.parse_args()
+    LOG.error("Loading checkpoints...")
     generator, kp_detector = load_checkpoints(
         config_path=opt.config, checkpoint_path=opt.checkpoint, cpu=opt.cpu
     )
+    LOG.error("Start processing...")
     process(opt, generator, kp_detector)
 
 
