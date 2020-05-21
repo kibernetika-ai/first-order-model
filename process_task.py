@@ -109,16 +109,13 @@ def check_task(task):
     params = task.get("params", {})
     task_dir = task.get("task_dir", "")
     if task_dir == "":
-        LOG.error("Got empty task dir")
-        return
+        raise ValueError("Got empty task dir")
     img = params.get("dst", {}).get("filename", "")
     if img == "":
-        LOG.error("Got empty dest image")
-        return
+        raise ValueError("Got empty dest image")
     video = params.get("src", {}).get("filename", "")
     if video == "":
-        LOG.error("Got empty src video")
-        return
+        raise ValueError("Got empty src video")
     return img, video
 
 
