@@ -94,10 +94,12 @@ def process(opt, generator, kp_detector):
 
         try:
             task_dir, img, video = check_task(task)
+            LOG.error(f"Processing task {task_id}...")
             out_file = os.path.join(opt.dst_dir, task_dir, "result", "result.mp4")
             video = os.path.join(opt.src_dir, video)
             img = os.path.join(opt.src_dir, img)
             img = imageio.imread(img)
+            LOG.error("Go!")
             process_task(task_id, opt, img, video, out_file, generator, kp_detector)
 
         except Exception as e:
@@ -109,12 +111,10 @@ def process(opt, generator, kp_detector):
 
 def check_task(task):
     params = task.get("params", {})
-    LOG.info(params)
     task_dir = task.get("task_dir", "")
     if task_dir == "":
         raise ValueError("Got empty task dir")
     img = params.get("dst", {}).get("filename", "")
-    LOG.info(img)
     if img == "":
         raise ValueError("Got empty dest image")
     video = params.get("src", {}).get("filename", "")
