@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
 
         video = cv2.VideoCapture(0)
-
+        count = 0
         while True:
             frame = video.read()
             if isinstance(frame, tuple):
@@ -86,6 +86,9 @@ if __name__ == "__main__":
             if frame is None:
                 print("Oops frame is None. Possibly camera or display does not work")
                 break
+            count += 1
+            if count<30:
+                continue
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             y, x, _ = frame.shape
@@ -95,9 +98,9 @@ if __name__ == "__main__":
             frame = frame[starty:starty + min_dim, startx:startx + min_dim, :]
 
             frame = resize(frame, (256, 256))[..., :3]
-            frame = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
+            data = torch.tensor(frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
 
-            kp_driving = kp_detector(frame)
+            kp_driving = kp_detector(data)
             if kp_driving_initial is None:
                 kp_driving_initial = kp_driving
 
@@ -108,6 +111,10 @@ if __name__ == "__main__":
 
             p = np.transpose(out['prediction'].data.cpu().numpy(), [0, 2, 3, 1])[0]
 
+
+            p = np.concatenate([frame, p], axis=1)
+            p = p * 255
+            p = p.astype(np.uint8)
             p = cv2.cvtColor(p, cv2.COLOR_BGR2RGB)
             cv2.imshow('Video', p)
             key = cv2.waitKey(1)
