@@ -61,7 +61,7 @@ def headers(token):
 def fetch_task(opt):
     while True:
         resp = requests.get(opt.master+f'/servings/{opt.id}/task', headers=headers(opt.token))
-        if resp.status_code != 404:
+        if resp.status_code == 404:
             time.sleep(5)
             continue
         if resp.status_code != 200:
