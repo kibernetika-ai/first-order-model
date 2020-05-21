@@ -95,12 +95,12 @@ def process(opt, generator, kp_detector):
         try:
             task_dir, img, video = check_task(task)
             out_file = os.path.join(opt.dst_dir, task_dir, "result", "result.mp4")
-            video = os.path.join(opt.src_dir, task_dir, video)
-            img = os.path.join(opt.src_dir, task_dir, img)
+            video = os.path.join(opt.src_dir, video)
+            img = os.path.join(opt.src_dir, img)
             img = imageio.imread(img)
             process_task(task_id, opt, img, video, out_file, generator, kp_detector)
 
-        except ValueError as e:
+        except Exception as e:
             LOG.error(f"Task {task_id} process error: {str(e)}")
             send_status(opt, task_id, state="failed")
             continue
