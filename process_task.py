@@ -91,18 +91,20 @@ def process(opt, generator, kp_detector):
         if task_id == "":
             LOG.error("Got empty task id")
             continue
+
         try:
-            img, video = check_task(task)
+            task_dir, img, video = check_task(task)
+            out_file = os.path.join(opt.dst_dir, task_dir, "result", "result.mp4")
+            video = os.path.join(opt.src_dir, task_dir, video)
+            img = os.path.join(opt.src_dir, task_dir, img)
+            img = imageio.imread(img)
+            process_task(task_id, opt, img, video, out_file, generator, kp_detector)
+
         except ValueError as e:
             LOG.error(f"Task {task_id} process error: {str(e)}")
             send_status(opt, task_id, state="failed")
             continue
 
-        out_file = os.path.join(opt.dst_dir, os.path.dirname(img), "result.mp4")
-        video = os.path.join(opt.src_dir, video)
-        img = os.path.join(opt.src_dir, img)
-        img = imageio.imread(img)
-        process_task(task_id, opt, img, video, out_file, generator, kp_detector)
 
 
 def check_task(task):
@@ -116,7 +118,7 @@ def check_task(task):
     video = params.get("src", {}).get("filename", "")
     if video == "":
         raise ValueError("Got empty src video")
-    return img, video
+    return task_dir, img, video
 
 
 def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_detector):
