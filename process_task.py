@@ -187,10 +187,11 @@ def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_det
                 last_percent = percent
                 send_status(opt, task_id, percent=min(100, percent))
 
-            LOG.info(f"processed {frame_counter} frames")
+            LOG.info(f"processed {frame_counter}/{frames_count} frames")
 
         video.release()
         vout.release()
+        LOG.info(f"Task {task_id} done!")
         send_status(opt, task_id, state="completed")
 
 
