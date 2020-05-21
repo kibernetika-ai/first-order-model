@@ -109,12 +109,12 @@ def process(opt, generator, kp_detector):
 
 def check_task(task):
     params = task.get("params", {})
-    LOG.info("params", params)
+    LOG.info(params)
     task_dir = task.get("task_dir", "")
     if task_dir == "":
         raise ValueError("Got empty task dir")
     img = params.get("dst", {}).get("filename", "")
-    LOG.info("img", img)
+    LOG.info(img)
     if img == "":
         raise ValueError("Got empty dest image")
     video = params.get("src", {}).get("filename", "")
