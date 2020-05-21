@@ -1,3 +1,5 @@
+import shutil
+
 import cv2
 
 
@@ -94,7 +96,10 @@ def process(opt, generator, kp_detector):
 
         try:
             task_dir, img, video = check_task(task)
-            out_file = os.path.join(opt.dst_dir, task_dir, "result", "result.mp4")
+            out_file_dir = os.path.join(opt.dst_dir, task_dir, "result")
+            if not os.path.exists(out_file_dir):
+                os.makedirs(out_file_dir)
+            out_file = os.path.join(out_file_dir, "result.mp4")
             video = os.path.join(opt.src_dir, video)
             img = os.path.join(opt.src_dir, img)
             img = imageio.imread(img)
@@ -137,6 +142,7 @@ def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_det
         frames_count = int(cv2.VideoCapture.get(video, cv2.CAP_PROP_FRAME_COUNT))
         frame_counter = 0
         last_percent = 0
+        last_time = time.time()
 
         while True:
             frame_img = video.read()
@@ -183,8 +189,10 @@ def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_det
             frame_counter += 1
 
             percent = int(frame_counter / frames_count * 100)
-            if percent != last_percent:
+            now = time.time()
+            if percent != last_percent and now - last_time > 1:
                 last_percent = percent
+                last_time = now
                 send_status(opt, task_id, percent=min(100, percent))
 
             LOG.info(f"processed {frame_counter}/{frames_count} frames")
