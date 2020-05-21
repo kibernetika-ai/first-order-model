@@ -127,6 +127,7 @@ def main():
     parser.add_argument("--dst_dir", default='/outputs')
     parser.add_argument("--token", default='')
     parser.add_argument("--master", default='')
+    parser.add_argument("--id", default='test')
 
     parser.add_argument("--relative", dest="relative", action="store_true",
                         help="use relative or absolute keypoint coordinates")
