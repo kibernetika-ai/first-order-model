@@ -155,11 +155,11 @@ def process(opt, generator, kp_detector):
             tmp_data = pre_process_video(video)
             if tmp_data is None:
                 LOG.info('Failed preprocess Task')
-                #send_status(opt, task_id, state="failed")
+                send_status(opt, task_id, state="failed")
                 continue
         except Exception as e:
             LOG.error(f"Task {task_id} process error: {str(e)}")
-            #send_status(opt, task_id, state="failed")
+            send_status(opt, task_id, state="failed")
             continue
         try:
             intermediate_file = os.path.join(tmp_data[0], "result.mp4")
