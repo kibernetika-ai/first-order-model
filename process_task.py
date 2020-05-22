@@ -165,9 +165,10 @@ def process(opt, generator, kp_detector):
                 send_status(opt, task_id, state="failed")
                 continue
         except Exception as e:
-            LOG.error(f"Task {task_id} process error: {str(e)}")
+            LOG.error(f"Task {task_id} pre-process error: {str(e)}")
             send_status(opt, task_id, state="failed")
             continue
+
         try:
             intermediate_file = os.path.join(tmp_data[0], "result.mp4")
             process_task(task_id, opt, img, tmp_data[1], intermediate_file, generator, kp_detector)
@@ -177,8 +178,15 @@ def process(opt, generator, kp_detector):
             send_status(opt, task_id, state="failed")
             continue
 
-        out_file = os.path.join(out_file_dir, "result.mp4")
-        post_process_video(intermediate_file, tmp_data, out_file)
+        try:
+            out_file = os.path.join(out_file_dir, "result.mp4")
+            post_process_video(intermediate_file, tmp_data, out_file)
+            send_status(opt, task_id, state="completed")
+        except Exception as e:
+            LOG.error(f"Task {task_id} post-process error: {str(e)}")
+            shutil.rmtree(tmp_data[0], ignore_errors=True)
+            send_status(opt, task_id, state="failed")
+            continue
 
 
 def check_task(task):
@@ -271,8 +279,6 @@ def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_det
         video.release()
         vout.release()
         LOG.info(f"Task {task_id} done, file {out_file} written!")
-        time.sleep(2)
-        send_status(opt, task_id, state="completed")
 
 
 def send_status(opt, task_id, state="executing", percent=0):
