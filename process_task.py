@@ -2,7 +2,6 @@ import shutil
 
 import cv2
 
-
 import imageio
 import yaml
 from argparse import ArgumentParser
@@ -16,15 +15,15 @@ import tempfile
 import os
 import subprocess
 
-LOG = logging.getLogger(__name__)
-
 import torch
 from sync_batchnorm import DataParallelWithCallback
 
 from modules.generator import OcclusionAwareGenerator
 from modules.keypoint_detector import KPDetector
 from animate import normalize_kp
-import shutil
+
+LOG = logging.getLogger(__name__)
+
 
 def load_checkpoints(config_path, checkpoint_path, cpu=False):
     with open(config_path) as f:
@@ -85,41 +84,33 @@ def fetch_task(opt):
 def pre_process_video(input_file):
     dir = tempfile.mkdtemp()
     path = os.path.join(dir, 'video.mp4')
-    command = [
-            'ffmpeg',
-            '-y',
-            '-i', input_file,
-            '-r', '30',
-            path
-    ]
+    LOG.info('preprocessing video {} -> {}'.format(input_file, path))
+    command = f"ffmpeg -y -i {input_file} -r 30 {path}"
+    LOG.info(command)
+    command = command.split()
+
     try:
-        cmd = subprocess.Popen(command, stdout=subprocess.STDOUT, stderr=subprocess.STDOUT)
-        if cmd.returncode==0:
-            LOG.info("Converted: {}->{}".format(input_file,path))
-            return (dir,path)
+        LOG.info("starting pre-process subprocess...")
+        cmd = subprocess.run(command, stdout=subprocess.PIPE)
+        LOG.info("pre-process subprocess done")
+        if cmd.returncode == 0:
+            LOG.info("Converted: {}->{}".format(input_file, path))
+            return (dir, path)
         else:
             LOG.error("Failed to convert: {}->{}".format(input_file, path))
 
     except subprocess.CalledProcessError as e:
         LOG.error(e)
-    shutil.rmtree(dir,ignore_errors=True)
+    shutil.rmtree(dir, ignore_errors=True)
     return None
 
 
-def post_process_video(tmp_file,src_file,dest_file):
-    command = [
-        'ffmpeg',
-        '-y',
-        '-i', tmp_file,
-        '-i', src_file[1],
-        '-map', '0:v'
-        '-map', '1:a',
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        dest_file
-    ]
+def post_process_video(tmp_file, src_file, dest_file):
+    command = f"ffmpeg -y -i {tmp_file} -i {src_file[1]} -map 0:v -map 1:a -c:v copy -c:a aac {dest_file}"
+    LOG.info(command)
+    command = command.split()
     try:
-        cmd = subprocess.Popen(command, stdout=subprocess.STDOUT, stderr=subprocess.STDOUT)
+        cmd = subprocess.run(command, stdout=subprocess.PIPE)
         if cmd.returncode == 0:
             LOG.info("Converted: {}->{}".format(tmp_file, dest_file))
             shutil.rmtree(src_file[0], ignore_errors=True)
@@ -148,11 +139,15 @@ def process(opt, generator, kp_detector):
                 os.makedirs(out_file_dir)
 
             video = os.path.join(opt.src_dir, video)
-            logging.info('video: %s',video)
+            logging.info('video: %s', video)
             img = os.path.join(opt.src_dir, img)
             logging.info('img: %s', img)
-            img = imageio.imread(img)
+
+            img_filename = img
+            img = imageio.imread(img_filename)
+            LOG.info('img {} has been read'.format(img_filename))
             tmp_data = pre_process_video(video)
+            LOG.info('video has been processed')
             if tmp_data is None:
                 LOG.info('Failed preprocess Task')
                 send_status(opt, task_id, state="failed")
@@ -166,12 +161,12 @@ def process(opt, generator, kp_detector):
             process_task(task_id, opt, img, tmp_data[1], intermediate_file, generator, kp_detector)
         except Exception as e:
             LOG.error(f"Task {task_id} process error: {str(e)}")
-            shutil.rmtree(tmp_data[0],ignore_errors=True)
+            shutil.rmtree(tmp_data[0], ignore_errors=True)
             send_status(opt, task_id, state="failed")
             continue
 
         out_file = os.path.join(out_file_dir, "result.mp4")
-        post_process_video(intermediate_file,tmp_data,out_file)
+        post_process_video(intermediate_file, tmp_data, out_file)
 
 
 def check_task(task):
@@ -256,8 +251,10 @@ def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_det
                 last_percent = percent
                 last_time = now
                 send_status(opt, task_id, percent=min(100, percent))
+                LOG.info(f"processed {frame_counter}/{frames_count} frames")
 
-            LOG.info(f"processed {frame_counter}/{frames_count} frames")
+        if last_percent != 100:
+            send_status(opt, task_id, percent=100)
 
         video.release()
         vout.release()
@@ -268,7 +265,7 @@ def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_det
 def send_status(opt, task_id, state="executing", percent=0):
     resp = requests.post(
         opt.master + f"/tasks/{task_id}",
-        json={"state": state, "percent": percent,},
+        json={"state": state, "percent": percent},
         headers=headers(opt.token),
     )
     if resp.status_code != 200:
