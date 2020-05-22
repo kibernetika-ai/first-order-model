@@ -135,6 +135,7 @@ def post_process_video(tmp_file,src_file,dest_file):
 def process(opt, generator, kp_detector):
     while True:
         task = fetch_task(opt)
+        LOG.info('Got task :{}'.format(task))
         task_id = task.get("task_id", "")
         if task_id == "":
             LOG.error("Got empty task id")
@@ -147,7 +148,9 @@ def process(opt, generator, kp_detector):
                 os.makedirs(out_file_dir)
 
             video = os.path.join(opt.src_dir, video)
+            logging.info('video: %s',video)
             img = os.path.join(opt.src_dir, img)
+            logging.info('img: %s', img)
             img = imageio.imread(img)
             tmp_data = pre_process_video(video)
             if tmp_data is None:
