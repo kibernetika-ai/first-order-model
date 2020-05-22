@@ -271,6 +271,7 @@ def process_task(task_id, opt, img_orig, video_file, out_file, generator, kp_det
         video.release()
         vout.release()
         LOG.info(f"Task {task_id} done, file {out_file} written!")
+        time.sleep(2)
         send_status(opt, task_id, state="completed")
 
 
