@@ -69,16 +69,20 @@ def headers(token):
 
 def fetch_task(opt):
     while True:
-        resp = requests.get(
-            opt.master + f"/servings/{opt.id}/task", headers=headers(opt.token)
-        )
-        if resp.status_code in [204, 404]:
-            time.sleep(5)
-            continue
-        if resp.status_code != 200:
-            LOG.error("Response {}".format(resp.text))
-            raise Exception("Failed fetch task")
-        return resp.json()
+        try:
+            resp = requests.get(
+                opt.master + f"/servings/{opt.id}/task", headers=headers(opt.token)
+            )
+            if resp.status_code in [204, 404]:
+                time.sleep(5)
+                continue
+            if resp.status_code != 200:
+                LOG.error("Unexpected response {}: {}".format(resp.status_code, resp.text))
+                time.sleep(20)
+            return resp.json()
+        except requests.exceptions.RequestException as e:
+            LOG.error("Fetch task connection error: {}".format(str(e)))
+            time.sleep(20)
 
 
 def pre_process_video(input_file):
