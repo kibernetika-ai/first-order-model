@@ -12,8 +12,9 @@ from skimage.transform import resize
 import requests
 import logging
 import time
+import tempfile
 import os
-
+import subprocess
 
 LOG = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ from sync_batchnorm import DataParallelWithCallback
 from modules.generator import OcclusionAwareGenerator
 from modules.keypoint_detector import KPDetector
 from animate import normalize_kp
-
+import shutil
 
 def load_checkpoints(config_path, checkpoint_path, cpu=False):
     with open(config_path) as f:
@@ -81,13 +82,58 @@ def fetch_task(opt):
         return resp.json()
 
 
+def pre_process_video(input_file):
+    dir = tempfile.mkdtemp()
+    path = os.path.join(dir, 'video.mp4')
+    command = [
+            'ffmpeg',
+            '-y',
+            '-i', input_file,
+            '-r', '30',
+            path
+    ]
+    try:
+        cmd = subprocess.Popen(command, stdout=subprocess.STDOUT, stderr=subprocess.STDOUT)
+        if cmd.returncode==0:
+            LOG.info("Converted: {}->{}".format(input_file,path))
+            return (dir,path)
+        else:
+            LOG.error("Failed to convert: {}->{}".format(input_file, path))
+
+    except subprocess.CalledProcessError as e:
+        LOG.error(e)
+    shutil.rmtree(dir,ignore_errors=True)
+    return None
+
+
+def post_process_video(tmp_file,src_file,dest_file):
+    command = [
+        'ffmpeg',
+        '-y',
+        '-i', tmp_file,
+        '-i', src_file[1],
+        '-map', '0:v'
+        '-map', '1:a',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        dest_file
+    ]
+    try:
+        cmd = subprocess.Popen(command, stdout=subprocess.STDOUT, stderr=subprocess.STDOUT)
+        if cmd.returncode == 0:
+            LOG.info("Converted: {}->{}".format(tmp_file, dest_file))
+            shutil.rmtree(src_file[0], ignore_errors=True)
+            return dest_file
+        else:
+            LOG.error("Failed to convert: {}->{}".format(tmp_file, dest_file))
+    except subprocess.CalledProcessError as e:
+        LOG.error(e)
+    shutil.rmtree(src_file[0], ignore_errors=True)
+    return None
+
+
 def process(opt, generator, kp_detector):
     while True:
-        # {'task_id': 'f548a28e-70ec-4756-aaad-ba8cf6ba6baa', 'percent': 0, 'state': 'executing', 'params': {
-        #    'dst': {'filename': 'BB398819-0799-487A-829B-DD5D0C7449F7/f548a28e-70ec-4756-aaad-ba8cf6ba6baa/dst.jpg',
-        #            'name': 'dst.jpg'},
-        #    'src': {'filename': 'BB398819-0799-487A-829B-DD5D0C7449F7/f548a28e-70ec-4756-aaad-ba8cf6ba6baa/src.mov',
-        #            'name': 'source.mov'}}}
         task = fetch_task(opt)
         task_id = task.get("task_id", "")
         if task_id == "":
@@ -99,17 +145,30 @@ def process(opt, generator, kp_detector):
             out_file_dir = os.path.join(opt.dst_dir, task_dir, "result")
             if not os.path.exists(out_file_dir):
                 os.makedirs(out_file_dir)
-            out_file = os.path.join(out_file_dir, "result.mp4")
+
             video = os.path.join(opt.src_dir, video)
             img = os.path.join(opt.src_dir, img)
             img = imageio.imread(img)
-            process_task(task_id, opt, img, video, out_file, generator, kp_detector)
-
+            tmp_data = pre_process_video(video)
+            if tmp_data is None:
+                LOG.info('Failed preprocess Task')
+                send_status(opt, task_id, state="failed")
+                continue
         except Exception as e:
             LOG.error(f"Task {task_id} process error: {str(e)}")
             send_status(opt, task_id, state="failed")
             continue
+        try:
+            intermediate_file = os.path.join(tmp_data[0], "result.mp4")
+            process_task(task_id, opt, img, tmp_data[1], intermediate_file, generator, kp_detector)
+        except Exception as e:
+            LOG.error(f"Task {task_id} process error: {str(e)}")
+            shutil.rmtree(tmp_data[0],ignore_errors=True)
+            send_status(opt, task_id, state="failed")
+            continue
 
+        out_file = os.path.join(out_file_dir, "result.mp4")
+        post_process_video(intermediate_file,tmp_data,out_file)
 
 
 def check_task(task):
