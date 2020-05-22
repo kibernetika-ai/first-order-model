@@ -95,7 +95,7 @@ def pre_process_video(input_file):
 
     try:
         LOG.info("starting pre-process subprocess...")
-        cmd = subprocess.run(command, stdout=subprocess.PIPE)
+        cmd = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         LOG.info("pre-process subprocess done")
         if cmd.returncode == 0:
             LOG.info("Converted: {}->{}".format(input_file, path))
@@ -114,7 +114,7 @@ def post_process_video(tmp_file, src_file, dest_file):
     LOG.info(command)
     command = command.split()
     try:
-        cmd = subprocess.run(command, stdout=subprocess.PIPE)
+        cmd = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if cmd.returncode == 0:
             LOG.info("Converted: {}->{}".format(tmp_file, dest_file))
             shutil.rmtree(src_file[0], ignore_errors=True)
