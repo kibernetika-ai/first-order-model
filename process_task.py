@@ -128,6 +128,14 @@ def post_process_video(tmp_file, src_file, dest_file):
 
 
 def process(opt, generator, kp_detector):
+
+    resp = requests.post(
+        opt.master + f"/servings/{opt.id}/start",
+        headers=headers(opt.token),
+    )
+    if resp.status_code != 200:
+        LOG.error("Failed restart serving: {}".format(resp.text))
+
     while True:
         task = fetch_task(opt)
         LOG.info('Got task :{}'.format(task))
