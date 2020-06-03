@@ -47,17 +47,81 @@ class OcclusionAwareGenerator(nn.Module):
         self.estimate_occlusion_map = estimate_occlusion_map
         self.num_channels = num_channels
 
+
     def deform_input(self, inp, deformation):
         _, h_old, w_old, _ = deformation.shape
         _, _, h, w = inp.shape
         if h_old != h or w_old != w:
+            print('&&&&&&&&&&&FFIFJJF&&&&&&&&&&&&&')
             deformation = deformation.permute(0, 3, 1, 2)
             deformation = F.interpolate(deformation, size=(h, w), mode='bilinear')
             deformation = deformation.permute(0, 2, 3, 1)
         return F.grid_sample(inp, deformation)
 
-    def forward(self, source_image, kp_driving, kp_source):
-        # Encoding (downsampling) part
+    def forward_prepare(self, source_image,source_image_padded):
+        out = self.first(source_image)
+        for i in range(len(self.down_blocks)):
+            out = self.down_blocks[i](out)
+        self.dense_motion_network.down.skip_padding = True
+        source_image_padded = self.dense_motion_network.down(source_image_padded)
+        return out,source_image_padded
+
+    def forward_prepare_optical(self,source_image,kp_driving, kp_source, kp_initial):
+        kp_driving_value, kp_driving_jacobian = torch.split(kp_driving, [1, 2], 3)
+        kp_driving_value = torch.squeeze(kp_driving_value, 3)
+
+        kp_source_value, kp_source_jacobian = torch.split(kp_source, [1, 2], 3)
+        kp_source_value = torch.squeeze(kp_source_value, 3)
+
+        kp_initial_value, kp_initial_jacobian = torch.split(kp_initial, [1, 2], 3)
+        kp_initial_value = torch.squeeze(kp_initial_value, 3)
+
+        kp_value_diff = (kp_driving_value - kp_initial_value)
+        kp_new = kp_value_diff + kp_source_value
+
+        jacobian_diff = torch.matmul(kp_driving_jacobian, torch.inverse(kp_initial_jacobian))
+        kp_new_jacobian = torch.matmul(jacobian_diff, kp_source_jacobian)
+
+        kp_driving = {'value': kp_new, 'jacobian': kp_new_jacobian}
+        kp_source = {'value': kp_source_value, 'jacobian': kp_source_jacobian}
+        return self.dense_motion_network.prepare(source_image, kp_driving, kp_source)
+
+    def forward_optical(self,input,sparse_motion):
+        return self.dense_motion_network.last_forward(input,sparse_motion)
+
+    def forward_prepare_last(self,out,deformation,occlusion_map):
+        out = self.deform_input(out, deformation)
+        if out.shape[2] != occlusion_map.shape[2] or out.shape[3] != occlusion_map.shape[3]:
+            print('&&&&&&&&&&&&&&&&&&&&&&&&')
+            occlusion_map = F.interpolate(occlusion_map, size=out.shape[2:], mode='bilinear')
+        out = out * occlusion_map
+        return out
+    def forward_last(self,out):
+        out = self.bottleneck(out)
+        for i in range(len(self.up_blocks)):
+            out = self.up_blocks[i](out)
+        out = self.final(out)
+        out = F.sigmoid(out)
+        return out
+
+    def forward(self, source_image, kp_driving, kp_source, kp_initial):
+        kp_driving_value, kp_driving_jacobian = torch.split(kp_driving, [1, 2], 3)
+        kp_driving_value = torch.squeeze(kp_driving_value, 3)
+
+        kp_source_value, kp_source_jacobian = torch.split(kp_source, [1, 2], 3)
+        kp_source_value = torch.squeeze(kp_source_value, 3)
+
+        kp_initial_value, kp_initial_jacobian = torch.split(kp_initial, [1, 2], 3)
+        kp_initial_value = torch.squeeze(kp_initial_value, 3)
+
+        kp_value_diff = (kp_driving_value - kp_initial_value)
+        kp_new = kp_value_diff + kp_source_value
+
+        jacobian_diff = torch.matmul(kp_driving_jacobian, torch.inverse(kp_initial_jacobian))
+        kp_new_jacobian = torch.matmul(jacobian_diff, kp_source_jacobian)
+
+        kp_driving = {'value': kp_new, 'jacobian': kp_new_jacobian}
+        kp_source = {'value': kp_source_value, 'jacobian': kp_source_jacobian}
         out = self.first(source_image)
         for i in range(len(self.down_blocks)):
             out = self.down_blocks[i](out)
@@ -67,12 +131,12 @@ class OcclusionAwareGenerator(nn.Module):
         if self.dense_motion_network is not None:
             dense_motion = self.dense_motion_network(source_image=source_image, kp_driving=kp_driving,
                                                      kp_source=kp_source)
-            output_dict['mask'] = dense_motion['mask']
-            output_dict['sparse_deformed'] = dense_motion['sparse_deformed']
+            #output_dict['mask'] = dense_motion['mask']
+            #output_dict['sparse_deformed'] = dense_motion['sparse_deformed']
 
             if 'occlusion_map' in dense_motion:
                 occlusion_map = dense_motion['occlusion_map']
-                output_dict['occlusion_map'] = occlusion_map
+                #output_dict['occlusion_map'] = occlusion_map
             else:
                 occlusion_map = None
             deformation = dense_motion['deformation']
@@ -83,7 +147,7 @@ class OcclusionAwareGenerator(nn.Module):
                     occlusion_map = F.interpolate(occlusion_map, size=out.shape[2:], mode='bilinear')
                 out = out * occlusion_map
 
-            output_dict["deformed"] = self.deform_input(source_image, deformation)
+            #output_dict["deformed"] = self.deform_input(source_image, deformation)
 
         # Decoding part
         out = self.bottleneck(out)
@@ -92,6 +156,6 @@ class OcclusionAwareGenerator(nn.Module):
         out = self.final(out)
         out = F.sigmoid(out)
 
-        output_dict["prediction"] = out
+        #output_dict["prediction"] = out
 
-        return output_dict
+        return out

@@ -33,6 +33,7 @@ class KPDetector(nn.Module):
         self.scale_factor = scale_factor
         if self.scale_factor != 1:
             self.down = AntiAliasInterpolation2d(num_channels, self.scale_factor)
+        self.fmode = 0
 
     def gaussian2kp(self, heatmap):
         """
@@ -47,6 +48,10 @@ class KPDetector(nn.Module):
         return kp
 
     def forward(self, x):
+        if self.fmode == 1:
+            return self.forward_1(x)
+        if self.fmode == 2:
+            return self.forward_2(x)
         if self.scale_factor != 1:
             x = self.down(x)
 
@@ -72,4 +77,42 @@ class KPDetector(nn.Module):
             jacobian = jacobian.view(jacobian.shape[0], jacobian.shape[1], 2, 2)
             out['jacobian'] = jacobian
 
-        return out
+        v = out['value']
+        v = v.view(v.shape[0],v.shape[1],2,1)
+        v = torch.cat((v,jacobian),3)
+        return v
+
+    def forward_2(self, x,jacobian):
+        x = x.squeeze(2)
+        out = self.gaussian2kp(x)
+        v =  out['value']
+        v = v.view(v.shape[0], v.shape[1], 2, 1)
+        v = torch.cat((v, jacobian), 3)
+        return v
+
+    def forward_3(self, x):
+        if self.scale_factor != 1:
+            self.down.skip_padding = True
+            x = self.down(x)
+
+        feature_map = self.predictor(x)
+        prediction = self.kp(feature_map)
+
+        final_shape = prediction.shape
+        heatmap = prediction.view(final_shape[0], final_shape[1], -1)
+        heatmap = F.softmax(heatmap / self.temperature, dim=2)
+        heatmap = heatmap.view(*final_shape)
+        print(heatmap.shape)
+        if self.jacobian is not None:
+            jacobian_map = self.jacobian(feature_map)
+            jacobian_map = jacobian_map.reshape(final_shape[0], self.num_jacobian_maps, 4, final_shape[2],
+                                                final_shape[3])
+            heatmap = heatmap.unsqueeze(2)
+
+            jacobian = heatmap * jacobian_map
+            jacobian = jacobian.view(final_shape[0], final_shape[1], 4, -1)
+            jacobian = jacobian.sum(dim=-1)
+            jacobian = jacobian.view(jacobian.shape[0], jacobian.shape[1], 2, 2)
+
+
+        return heatmap,jacobian

@@ -88,6 +88,7 @@ class UpBlock2d(nn.Module):
 
     def forward(self, x):
         out = F.interpolate(x, scale_factor=2)
+        print('UpBlock2d {}'.format(out.shape))
         out = self.conv(out)
         out = self.norm(out)
         out = F.relu(out)
@@ -150,7 +151,9 @@ class Encoder(nn.Module):
     def forward(self, x):
         outs = [x]
         for down_block in self.down_blocks:
-            outs.append(down_block(outs[-1]))
+            bout = down_block(outs[-1])
+            print('Encoder Down {}'.format(bout.shape))
+            outs.append(bout)
         return outs
 
 
@@ -167,6 +170,7 @@ class Decoder(nn.Module):
         for i in range(num_blocks)[::-1]:
             in_filters = (1 if i == num_blocks - 1 else 2) * min(max_features, block_expansion * (2 ** (i + 1)))
             out_filters = min(max_features, block_expansion * (2 ** i))
+            print('Decoder')
             up_blocks.append(UpBlock2d(in_filters, out_filters, kernel_size=3, padding=1))
 
         self.up_blocks = nn.ModuleList(up_blocks)
@@ -231,13 +235,21 @@ class AntiAliasInterpolation2d(nn.Module):
         self.register_buffer('weight', kernel)
         self.groups = channels
         self.scale = scale
+        self.skip_padding = False
 
     def forward(self, input):
+        print('!!!!!!!!!!!!!!!!!!!!!!!!AntiAliasInterpolation2d: {}'.format(self.skip_padding))
         if self.scale == 1.0:
             return input
-
-        out = F.pad(input, (self.ka, self.kb, self.ka, self.kb))
+        #print((self.ka, self.kb, self.ka, self.kb))
+        #out = F.pad(input, [6,6,6,6,0,0,0,0])
+        #print(out.shape)
+        if self.skip_padding:
+            out = input
+        else:
+            out = F.pad(input, (self.ka, self.kb, self.ka, self.kb))
         out = F.conv2d(out, weight=self.weight, groups=self.groups)
-        out = F.interpolate(out, scale_factor=(self.scale, self.scale))
-
+        out = F.interpolate(out,scale_factor=(self.scale, self.scale))
+        #out = F.interpolate(out,size=(64,64))
+        #print(out.shape)
         return out

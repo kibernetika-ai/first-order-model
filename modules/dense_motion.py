@@ -78,6 +78,26 @@ class DenseMotionNetwork(nn.Module):
         sparse_deformed = sparse_deformed.view((bs, self.num_kp + 1, -1, h, w))
         return sparse_deformed
 
+    def prepare(self,source_image, kp_driving, kp_source):
+        bs, _, h, w = source_image.shape
+        heatmap_representation = self.create_heatmap_representations(source_image, kp_driving, kp_source)
+        sparse_motion = self.create_sparse_motions(source_image, kp_driving, kp_source)
+        deformed_source = self.create_deformed_source_image(source_image, sparse_motion)
+        input = torch.cat([heatmap_representation, deformed_source], dim=2)
+        input = input.view(bs, -1, h, w)
+        return input,sparse_motion
+
+    def last_forward(self,input,sparse_motion):
+        prediction = self.hourglass(input)
+        mask = self.mask(prediction)
+        mask = F.softmax(mask, dim=1)
+        mask = mask.unsqueeze(2)
+        sparse_motion = sparse_motion.permute(0, 1, 4, 2, 3)
+        deformation = (sparse_motion * mask).sum(dim=1)
+        deformation = deformation.permute(0, 2, 3, 1)
+        occlusion_map = torch.sigmoid(self.occlusion(prediction))
+        return deformation,occlusion_map
+
     def forward(self, source_image, kp_driving, kp_source):
         if self.scale_factor != 1:
             source_image = self.down(source_image)
@@ -88,7 +108,7 @@ class DenseMotionNetwork(nn.Module):
         heatmap_representation = self.create_heatmap_representations(source_image, kp_driving, kp_source)
         sparse_motion = self.create_sparse_motions(source_image, kp_driving, kp_source)
         deformed_source = self.create_deformed_source_image(source_image, sparse_motion)
-        out_dict['sparse_deformed'] = deformed_source
+        #out_dict['sparse_deformed'] = deformed_source
 
         input = torch.cat([heatmap_representation, deformed_source], dim=2)
         input = input.view(bs, -1, h, w)
@@ -97,7 +117,7 @@ class DenseMotionNetwork(nn.Module):
 
         mask = self.mask(prediction)
         mask = F.softmax(mask, dim=1)
-        out_dict['mask'] = mask
+        #out_dict['mask'] = mask
         mask = mask.unsqueeze(2)
         sparse_motion = sparse_motion.permute(0, 1, 4, 2, 3)
         deformation = (sparse_motion * mask).sum(dim=1)
