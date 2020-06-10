@@ -24,6 +24,9 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--config", required=True, help="path to config")
     parser.add_argument("--mode", default="train", choices=["train", "reconstruction", "animate"])
+    parser.add_argument("--data-dir")
+    parser.add_argument("--use-landmarks", action='store_true')
+    parser.add_argument("--batch-size", type=int, default=40)
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
     parser.add_argument("--device_ids", default="0", type=lambda x: list(map(int, x.split(','))),
@@ -40,6 +43,13 @@ if __name__ == "__main__":
     else:
         log_dir = os.path.join(opt.log_dir, os.path.basename(opt.config).split('.')[0])
         log_dir += ' ' + strftime("%d_%m_%y_%H.%M.%S", gmtime())
+
+    if opt.data_dir:
+        config['dataset_params']['root_dir'] = opt.data_dir
+    config['train_params']['batch_size'] = opt.batch_size
+    config['model_params']['kp_detector_params']['use_landmarks'] = opt.use_landmarks
+    if opt.use_landmarks:
+        config['model_params']['common_params']['num_kp'] = 68
 
     generator = OcclusionAwareGenerator(**config['model_params']['generator_params'],
                                         **config['model_params']['common_params'])

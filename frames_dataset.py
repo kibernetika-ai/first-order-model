@@ -1,9 +1,10 @@
 import os
+
+import cv2
 from skimage import io, img_as_float32
 from skimage.color import gray2rgb
 from sklearn.model_selection import train_test_split
 from imageio import mimread
-
 import numpy as np
 from torch.utils.data import Dataset
 import pandas as pd
@@ -11,7 +12,7 @@ from augmentation import AllAugmentationTransform
 import glob
 
 
-def read_video(name, frame_shape):
+def read_video(name, frame_shape, is_train=True):
     """
     Read video which can be:
       - an image of concatenated frames
@@ -40,7 +41,20 @@ def read_video(name, frame_shape):
         video_array = video_array.reshape((-1,) + frame_shape)
         video_array = np.moveaxis(video_array, 1, 2)
     elif name.lower().endswith('.gif') or name.lower().endswith('.mp4') or name.lower().endswith('.mov'):
-        video = np.array(mimread(name))
+        vc = cv2.VideoCapture(name)
+        n_frames = int(vc.get(cv2.CAP_PROP_FRAME_COUNT))
+        frame_idx = np.sort(np.random.choice(n_frames, replace=True, size=2)) if is_train else range(n_frames)
+
+        video = []
+        for idx in frame_idx:
+            vc.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = vc.read()
+            if not ret:
+                break
+
+            video.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+        video = np.stack(video)
         if len(video.shape) == 3:
             video = np.array([gray2rgb(frame) for frame in video])
         if video.shape[-1] == 4:
@@ -63,7 +77,9 @@ class FramesDataset(Dataset):
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
                  random_seed=0, pairs_list=None, augmentation_params=None):
         data_dir = os.environ.get("DATA_DIR")
-        root_dir = os.path.join(data_dir, root_dir)
+        if data_dir is not None:
+            root_dir = data_dir
+
         self.root_dir = os.path.join(root_dir)
         self.videos = os.listdir(root_dir)
         self.frame_shape = tuple(frame_shape)
@@ -105,7 +121,7 @@ class FramesDataset(Dataset):
     def __getitem__(self, idx):
         if self.is_train and self.id_sampling:
             name = self.videos[idx]
-            path = np.random.choice(glob.glob(os.path.join(self.root_dir, name + '*.mp4')))
+            path = np.random.choice(glob.glob(os.path.join(self.root_dir, name, '**/*.mp4'), recursive=True))
         else:
             name = self.videos[idx]
             path = os.path.join(self.root_dir, name)
@@ -118,7 +134,13 @@ class FramesDataset(Dataset):
             frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2))
             video_array = [img_as_float32(io.imread(os.path.join(path, frames[idx]))) for idx in frame_idx]
         else:
-            video_array = read_video(path, frame_shape=self.frame_shape)
+            video_array = read_video(path, frame_shape=self.frame_shape, is_train=self.is_train)
+            if video_array.shape[1:3] != self.frame_shape[:2]:
+                new_video = np.zeros([len(video_array), *self.frame_shape])
+                for i, im in enumerate(video_array):
+                    new_video[i] = cv2.resize(im, (self.frame_shape[1], self.frame_shape[0]))
+                video_array = new_video
+
             num_frames = len(video_array)
             frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2)) if self.is_train else range(
                 num_frames)
