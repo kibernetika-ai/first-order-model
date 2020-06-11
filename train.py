@@ -82,7 +82,7 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
                 logger.log_iter(losses=losses)
 
                 if (i + epoch * len(dataset)) % 100 == 0:
-                    print_fun(f'Step {i + epoch * len(dataset)}: {", ".join([f"{k}={v}" for k, v in losses.items()])}')
+                    print_fun(f'Epoch {epoch}, global step {i + epoch * len(dataset)}: {", ".join([f"{k}={v}" for k, v in losses.items()])}')
 
             scheduler_generator.step()
             scheduler_discriminator.step()

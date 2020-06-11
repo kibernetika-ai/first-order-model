@@ -16,7 +16,7 @@ from modules.keypoint_detector import KPDetector
 
 import torch
 
-from train import train
+import train
 from reconstruction import reconstruction
 from animate import animate
 
@@ -27,6 +27,8 @@ if __name__ == "__main__":
     parser.add_argument("--data-dir")
     parser.add_argument("--use-landmarks", action='store_true')
     parser.add_argument("--batch-size", type=int, default=40)
+    parser.add_argument("--epochs", type=int, default=0)
+    parser.add_argument("--repeats", type=int, default=0)
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
     parser.add_argument("--device_ids", default="0", type=lambda x: list(map(int, x.split(','))),
@@ -46,6 +48,11 @@ if __name__ == "__main__":
 
     if opt.data_dir:
         config['dataset_params']['root_dir'] = opt.data_dir
+    if opt.epochs != 0:
+        config['train_params']['num_epochs'] = opt.epochs
+    if opt.repeats != 0:
+        config['train_params']['num_repeats'] = opt.repeats
+
     config['train_params']['batch_size'] = opt.batch_size
     config['model_params']['kp_detector_params']['use_landmarks'] = opt.use_landmarks
     if opt.use_landmarks:
@@ -76,6 +83,7 @@ if __name__ == "__main__":
         print(kp_detector)
 
     dataset = FramesDataset(is_train=(opt.mode == 'train'), **config['dataset_params'])
+    train.print_fun(f'Dataset length: {len(dataset)}')
 
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
@@ -84,7 +92,7 @@ if __name__ == "__main__":
 
     if opt.mode == 'train':
         print("Training...")
-        train(config, generator, discriminator, kp_detector, opt.checkpoint, log_dir, dataset, opt.device_ids)
+        train.train(config, generator, discriminator, kp_detector, opt.checkpoint, log_dir, dataset, opt.device_ids)
     elif opt.mode == 'reconstruction':
         print("Reconstruction...")
         reconstruction(config, generator, kp_detector, opt.checkpoint, log_dir, dataset)
