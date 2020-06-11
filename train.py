@@ -1,3 +1,4 @@
+import sys
 from tqdm import trange
 import torch
 
@@ -11,6 +12,11 @@ from torch.optim.lr_scheduler import MultiStepLR
 from sync_batchnorm import DataParallelWithCallback
 
 from frames_dataset import DatasetRepeater
+
+
+def print_fun(s):
+    print(s)
+    sys.stdout.flush()
 
 
 def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, dataset, device_ids):
@@ -36,7 +42,7 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
 
     if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
         dataset = DatasetRepeater(dataset, train_params['num_repeats'])
-    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=train_params['batch_size'], shuffle=True, drop_last=True, num_workers=4)
 
     generator_full = GeneratorFullModel(kp_detector, generator, discriminator, train_params)
     discriminator_full = DiscriminatorFullModel(kp_detector, generator, discriminator, train_params)
@@ -46,8 +52,8 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
         discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
 
     with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
-        for epoch in trange(start_epoch, train_params['num_epochs']):
-            for x in dataloader:
+        for epoch in trange(start_epoch, train_params['num_epochs'], disable=None):
+            for i, x in enumerate(dataloader):
                 losses_generator, generated = generator_full(x)
 
                 loss_values = [val.mean() for val in losses_generator.values()]
@@ -74,6 +80,10 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
                 losses_generator.update(losses_discriminator)
                 losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
                 logger.log_iter(losses=losses)
+
+                print_fun(i)
+                if (i + epoch * len(dataset)) % 100 == 0:
+                    print_fun(f'Step {i + epoch * len(dataset)}: {", ".join([f"{k}={v}" for k, v in losses.items()])}')
 
             scheduler_generator.step()
             scheduler_discriminator.step()
