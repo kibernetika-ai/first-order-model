@@ -108,6 +108,15 @@ class FramesDataset(Dataset):
         else:
             self.videos = test_videos
 
+        name = self.videos[0]
+        path = glob.glob(os.path.join(self.root_dir, name, '**/*.mp4'), recursive=True)
+        if len(path) > 0:
+            print('Detected video dataset.')
+            self.video_dataset = True
+        else:
+            print('Detected frame dataset.')
+            self.video_dataset = False
+
         self.is_train = is_train
 
         if self.is_train:
@@ -119,9 +128,12 @@ class FramesDataset(Dataset):
         return len(self.videos)
 
     def __getitem__(self, idx):
-        if self.is_train and self.id_sampling:
+        if self.is_train and self.id_sampling and self.video_dataset:
             name = self.videos[idx]
             path = np.random.choice(glob.glob(os.path.join(self.root_dir, name, '**/*.mp4'), recursive=True))
+        elif self.is_train and self.id_sampling and not self.video_dataset:
+            name = self.videos[idx]
+            path = np.random.choice(glob.glob(os.path.join(self.root_dir, name, '*'), recursive=True))
         else:
             name = self.videos[idx]
             path = os.path.join(self.root_dir, name)
@@ -129,10 +141,14 @@ class FramesDataset(Dataset):
         video_name = os.path.basename(path)
 
         if self.is_train and os.path.isdir(path):
-            frames = os.listdir(path)
+            frames = glob.glob(os.path.join(path, '*.jpg'))
             num_frames = len(frames)
             frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2))
-            video_array = [img_as_float32(io.imread(os.path.join(path, frames[idx]))) for idx in frame_idx]
+            video_array = [img_as_float32(cv2.imread(os.path.join(path, frames[idx]))) for idx in frame_idx]
+            new_video = np.zeros([len(video_array), *self.frame_shape])
+            for i, im in enumerate(video_array):
+                new_video[i] = cv2.resize(im, (self.frame_shape[1], self.frame_shape[0]))
+            video_array = new_video
         else:
             video_array = read_video(path, frame_shape=self.frame_shape, is_train=self.is_train)
             if video_array.shape[1:3] != self.frame_shape[:2]:
