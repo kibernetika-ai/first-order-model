@@ -149,7 +149,10 @@ class FramesDataset(Dataset):
                 new_idx = np.random.randint(0, len(self))
                 return self[new_idx]
             frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2))
-            video_array = [img_as_float32(cv2.imread(os.path.join(path, frames[idx]))) for idx in frame_idx]
+            video_array = [
+                img_as_float32(cv2.cvtColor(cv2.imread(os.path.join(path, frames[idx])), cv2.COLOR_BGR2RGB))
+                for idx in frame_idx
+            ]
             new_video = np.zeros([len(video_array), *self.frame_shape])
             for i, im in enumerate(video_array):
                 new_video[i] = cv2.resize(im, (self.frame_shape[1], self.frame_shape[0]))
