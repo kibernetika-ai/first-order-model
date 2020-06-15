@@ -80,6 +80,8 @@ class FramesDataset(Dataset):
         if data_dir is not None:
             root_dir = data_dir
 
+        print(f'Dataset root dir {root_dir}.')
+
         self.root_dir = os.path.join(root_dir)
         self.videos = os.listdir(root_dir)
         self.frame_shape = tuple(frame_shape)
@@ -111,11 +113,10 @@ class FramesDataset(Dataset):
         name = self.videos[0]
         path = glob.glob(os.path.join(self.root_dir, name, '**/*.jpg'), recursive=True)
         if len(path) > 0:
-            print(f'Detected frame dataset by {path}.')
-
+            print(f'Detected frame dataset by {path[0]}.')
             self.video_dataset = False
         else:
-            print(f'Detected video dataset by {path}.')
+            print(f'Detected video dataset.')
             self.video_dataset = True
 
         self.is_train = is_train
