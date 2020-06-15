@@ -145,6 +145,9 @@ class FramesDataset(Dataset):
         if self.is_train and os.path.isdir(path):
             frames = glob.glob(os.path.join(path, '*.jpg'))
             num_frames = len(frames)
+            if num_frames < 2:
+                new_idx = np.random.randint(0, len(self))
+                return self[new_idx]
             frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2))
             video_array = [img_as_float32(cv2.imread(os.path.join(path, frames[idx]))) for idx in frame_idx]
             new_video = np.zeros([len(video_array), *self.frame_shape])
