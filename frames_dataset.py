@@ -109,13 +109,13 @@ class FramesDataset(Dataset):
             self.videos = test_videos
 
         name = self.videos[0]
-        path = glob.glob(os.path.join(self.root_dir, name, '**/*.mp4'), recursive=True)
+        path = glob.glob(os.path.join(self.root_dir, name, '**/*.jpg'), recursive=True)
         if len(path) > 0:
-            print('Detected video dataset.')
-            self.video_dataset = True
-        else:
             print('Detected frame dataset.')
             self.video_dataset = False
+        else:
+            print('Detected video dataset.')
+            self.video_dataset = True
 
         self.is_train = is_train
 
