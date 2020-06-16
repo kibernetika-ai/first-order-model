@@ -1,16 +1,16 @@
 import sys
-from tqdm import trange
-import torch
 
+import cv2
+import numpy as np
+import tensorboardX
+import torch
+from tqdm import trange
+from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.data import DataLoader
 
 from logger import Logger
 from modules.model import GeneratorFullModel, DiscriminatorFullModel
-
-from torch.optim.lr_scheduler import MultiStepLR
-
 from sync_batchnorm import DataParallelWithCallback
-
 from frames_dataset import DatasetRepeater
 
 
@@ -49,6 +49,7 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
         drop_last=True,
         num_workers=4
     )
+    print_fun(f'Full dataset length (with repeats): {len(dataset)}')
 
     generator_full = GeneratorFullModel(kp_detector, generator, discriminator, train_params)
     discriminator_full = DiscriminatorFullModel(kp_detector, generator, discriminator, train_params)
@@ -56,6 +57,8 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
     if torch.cuda.is_available():
         generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)
         discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
+
+    writer = tensorboardX.SummaryWriter(log_dir, flush_secs=60)
 
     with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
         for epoch in trange(start_epoch, train_params['num_epochs'], disable=None):
@@ -87,8 +90,35 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
                 losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
                 logger.log_iter(losses=losses)
 
-                if (i + epoch * len(dataset)) % 20 == 0:
-                    print_fun(f'Epoch {epoch}, global step {i + epoch * len(dataset)}: {", ".join([f"{k}={v}" for k, v in losses.items()])}')
+                step = i + epoch * len(dataset) / dataloader.batch_size
+                if step % 20 == 0:
+                    print_fun(f'Epoch {epoch + 1}, global step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}')
+
+                if step != 0 and step % 50 == 0:
+                    for k, loss in losses.items():
+                        writer.add_scalar(k, float(loss), global_step=step)
+                    # add images
+                    source = x['source'][0].detach().cpu().numpy().transpose([1, 2, 0])
+                    driving = x['driving'][0].detach().cpu().numpy().transpose([1, 2, 0])
+                    kp_source = generated['kp_source']['value'][0].detach().cpu().numpy()
+                    kp_driving = generated['kp_driving']['value'][0].detach().cpu().numpy()
+                    pred = generated['prediction'][0].detach().cpu().numpy().transpose([1, 2, 0])
+                    kp_source = kp_source * 127.5 + 127.5
+                    kp_driving = kp_driving * 127.5 + 127.5
+                    source = cv2.UMat((source * 255.).clip(0, 255).astype(np.uint8)).get()
+                    driving = cv2.UMat((driving * 255.).clip(0, 255).astype(np.uint8)).get()
+                    pred = (pred * 255.).clip(0, 255).astype(np.uint8)
+                    for x1, y1 in kp_source:
+                        cv2.circle(source, (int(x1), int(y1)), 2, (250, 250, 250), thickness=cv2.FILLED)
+                    for x1, y1 in kp_driving:
+                        cv2.circle(driving, (int(x1), int(y1)), 2, (250, 250, 250), thickness=cv2.FILLED)
+
+                    writer.add_image(
+                        'SourceDrivingPred', np.hstack((source, driving, pred)),
+                        global_step=step,
+                        dataformats='HWC'
+                    )
+                    writer.flush()
 
             scheduler_generator.step()
             scheduler_discriminator.step()
@@ -99,4 +129,4 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
                                      'kp_detector': kp_detector,
                                      'optimizer_generator': optimizer_generator,
                                      'optimizer_discriminator': optimizer_discriminator,
-                                     'optimizer_kp_detector': optimizer_kp_detector}, inp=x, out=generated)
+                                     'optimizer_kp_detector': optimizer_kp_detector})

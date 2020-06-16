@@ -48,7 +48,10 @@ class Landmarks(nn.Module):
         heatmap = self.fan(x)[-1]
 
         points, _ = face_alignment.api.get_preds_fromhm(heatmap.cpu())
-        return heatmap, (points * 4).to(heatmap.device)
+
+        points = points * 4
+        points = (points - 127.5) / 127.5
+        return heatmap, points.to(heatmap.device)
 
 
 class KPDetector(nn.Module):
@@ -83,7 +86,7 @@ class KPDetector(nn.Module):
                 )
             else:
                 self.jacobian = nn.Conv2d(in_channels=self.predictor.out_filters,
-                                          out_channels=4 * self.num_jacobian_maps, kernel_size=(7, 7), padding=2)
+                                          out_channels=4 * self.num_jacobian_maps, kernel_size=(7, 7), padding=pad)
             self.jacobian.weight.data.zero_()
             self.jacobian.bias.data.copy_(torch.tensor([1, 0, 0, 1] * self.num_jacobian_maps, dtype=torch.float))
         else:
@@ -121,7 +124,8 @@ class KPDetector(nn.Module):
             heatmap = heatmap.view(*final_shape)  # B, 10, 1, 58, 58
             out = self.gaussian2kp(heatmap)
         else:
-            heatmap, points = self.fan(x_orig)
+            heatmap, points = self.fan(x_orig)  # heatmap should be [0, 1], points [-1, 1]
+
             out = {'value': points}
             #  heatmap B, 68, 64, 64
             #  points B, 68, 2
