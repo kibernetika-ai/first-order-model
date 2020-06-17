@@ -26,6 +26,8 @@ if __name__ == "__main__":
     parser.add_argument("--mode", default="train", choices=["train", "reconstruction", "animate"])
     parser.add_argument("--data-dir")
     parser.add_argument("--use-landmarks", action='store_true')
+    parser.add_argument("--enable-jacobian", action='store_true')
+    parser.add_argument("--disable-jacobian", action='store_true')
     parser.add_argument("--batch-size", type=int, default=40)
     parser.add_argument("--epochs", type=int, default=0)
     parser.add_argument("--repeats", type=int, default=0)
@@ -59,6 +61,11 @@ if __name__ == "__main__":
     if not opt.use_landmarks:
         config['train_params']['loss_weights']['equivariance_jacobian'] = 10
         config['model_params']['common_params']['estimate_jacobian'] = True
+    if opt.disable_jacobian:
+        config['model_params']['common_params']['estimate_jacobian'] = False
+    if opt.enable_jacobian:
+        config['model_params']['common_params']['estimate_jacobian'] = True
+
     if opt.use_landmarks:
         config['model_params']['common_params']['num_kp'] = 68
     elif opt.num_kp:
