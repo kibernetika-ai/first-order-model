@@ -41,8 +41,10 @@ class Landmarks(nn.Module):
         if torch.cuda.is_available():
             fan.to(torch.device('cuda'))
 
-        self.fan = fan.requires_grad_(False)
-        self.requires_grad_(False)
+        for p in fan.parameters():
+            p.requires_grad_(False)
+        self.fan = fan  # .requires_grad_(False)
+        # self.requires_grad_(False)
 
     def forward(self, x):
         heatmap = self.fan(x)[-1]
@@ -67,7 +69,7 @@ class KPDetector(nn.Module):
         self.use_landmarks = use_landmarks
         if use_landmarks:
             num_kp = 68
-            self.fan = Landmarks().requires_grad_(False)
+            self.fan = Landmarks()#.requires_grad_(False)
 
         self.predictor = Hourglass(block_expansion, in_features=num_channels,
                                    max_features=max_features, num_blocks=num_blocks)

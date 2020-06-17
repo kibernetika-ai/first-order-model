@@ -52,9 +52,9 @@ class OcclusionAwareGenerator(nn.Module):
         _, _, h, w = inp.shape
         if h_old != h or w_old != w:
             deformation = deformation.permute(0, 3, 1, 2)
-            deformation = F.interpolate(deformation, size=(h, w), mode='bilinear', align_corners=True)
+            deformation = F.interpolate(deformation, size=(h, w), mode='bilinear')
             deformation = deformation.permute(0, 2, 3, 1)
-        return F.grid_sample(inp, deformation, align_corners=True)
+        return F.grid_sample(inp, deformation)
 
     def forward(self, source_image, kp_driving, kp_source):
         # Encoding (downsampling) part
@@ -80,7 +80,7 @@ class OcclusionAwareGenerator(nn.Module):
 
             if occlusion_map is not None:
                 if out.shape[2] != occlusion_map.shape[2] or out.shape[3] != occlusion_map.shape[3]:
-                    occlusion_map = F.interpolate(occlusion_map, size=out.shape[2:], mode='bilinear', align_corners=True)
+                    occlusion_map = F.interpolate(occlusion_map, size=out.shape[2:], mode='bilinear')
                 out = out * occlusion_map
 
             output_dict["deformed"] = self.deform_input(source_image, deformation)
