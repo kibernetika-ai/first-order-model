@@ -58,6 +58,7 @@ if __name__ == "__main__":
     config['model_params']['kp_detector_params']['use_landmarks'] = opt.use_landmarks
     if not opt.use_landmarks:
         config['train_params']['loss_weights']['equivariance_jacobian'] = 10
+        config['model_params']['common_params']['estimate_jacobian'] = True
     if opt.use_landmarks:
         config['model_params']['common_params']['num_kp'] = 68
     elif opt.num_kp:
