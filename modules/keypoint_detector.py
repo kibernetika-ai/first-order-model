@@ -79,7 +79,7 @@ class KPDetector(nn.Module):
             self.num_jacobian_maps = 1 if single_jacobian_map else num_kp
             if self.use_landmarks:
                 self.jacobian = nn.Conv2d(
-                    in_channels=num_kp,
+                    in_channels=self.predictor.out_filters,
                     out_channels=4 * self.num_jacobian_maps,
                     kernel_size=(7, 7),
                     padding=3
@@ -114,8 +114,8 @@ class KPDetector(nn.Module):
         if self.scale_factor != 1:
             x = self.down(x)
 
+        feature_map = self.predictor(x)  # B, 35, 64, 64
         if not self.use_landmarks:
-            feature_map = self.predictor(x)  # B, 35, 64, 64
             prediction = self.kp(feature_map)  # B, 10, 58, 58
 
             final_shape = prediction.shape
@@ -129,8 +129,9 @@ class KPDetector(nn.Module):
             out = {'value': points}
             #  heatmap B, 68, 64, 64
             #  points B, 68, 2
-            feature_map = heatmap
+            # feature_map = heatmap
             final_shape = heatmap.shape
+            # final_shape = torch.Size([heatmap.shape[0], self.num_jacobian_maps, 58, 58])
         if self.jacobian is not None:
             jacobian_map = self.jacobian(feature_map)
             jacobian_map = jacobian_map.reshape(final_shape[0], self.num_jacobian_maps, 4, final_shape[2],

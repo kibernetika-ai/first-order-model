@@ -29,6 +29,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=40)
     parser.add_argument("--epochs", type=int, default=0)
     parser.add_argument("--repeats", type=int, default=0)
+    parser.add_argument("--num-kp", type=int, default=0)
     parser.add_argument("--log_dir", default='log', help="path to log into")
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
     parser.add_argument("--device_ids", default="0", type=lambda x: list(map(int, x.split(','))),
@@ -55,8 +56,12 @@ if __name__ == "__main__":
 
     config['train_params']['batch_size'] = opt.batch_size
     config['model_params']['kp_detector_params']['use_landmarks'] = opt.use_landmarks
+    if not opt.use_landmarks:
+        config['train_params']['loss_weights']['equivariance_jacobian'] = 10
     if opt.use_landmarks:
         config['model_params']['common_params']['num_kp'] = 68
+    elif opt.num_kp:
+        config['model_params']['common_params']['num_kp'] = opt.num_kp
 
     generator = OcclusionAwareGenerator(**config['model_params']['generator_params'],
                                         **config['model_params']['common_params'])
