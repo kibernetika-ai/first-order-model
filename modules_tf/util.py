@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import layers
+from tensorflow.python.ops.gen_image_ops import resize_nearest_neighbor
 
 
 def kp2gaussian(kp, spatial_size, kp_variance):
@@ -243,10 +244,8 @@ class AntiAliasInterpolation2d(layers.Layer):
         # gaussian function of each dimension.
         kernel = 1
         meshgrids = tf.meshgrid(
-            [
-                tf.range(size, dtype=tf.float32)
-                for size in kernel_size
-            ]
+            [tf.range(kernel_size[0], dtype=tf.float32)],
+            [tf.range(kernel_size[1], dtype=tf.float32)],
         )
         for size, std, mgrid in zip(kernel_size, sigma, meshgrids):
             mean = (size - 1) / 2
@@ -255,10 +254,10 @@ class AntiAliasInterpolation2d(layers.Layer):
         # Make sure sum of values in gaussian kernel equals 1.
         kernel = kernel / tf.reduce_sum(kernel)
         # Reshape to depthwise convolutional weight
-        kernel = tf.reshape(kernel, [1, 1, *kernel.size()])
-        kernel = tf.tile(kernel.repeat(channels, *[1] * (kernel.dim() - 1)))
+        kernel = tf.reshape(kernel, [1, 1, *kernel.shape])
+        kernel = tf.repeat(kernel, channels, 0)
 
-        self.kernel = tf.constant(kernel, name='kernel')
+        self.kernel = tf.transpose(tf.constant(kernel, name='kernel'), [2, 3, 1, 0])
         # self.register_buffer('weight', kernel)
         self.groups = channels
         self.scale = scale
@@ -273,10 +272,14 @@ class AntiAliasInterpolation2d(layers.Layer):
             out = input
         else:
             out = tf.keras.backend.spatial_2d_padding(input, ((self.ka, self.kb), (self.ka, self.kb)))
-        out = tf.nn.conv2d(out, self.kernel, strides=1, padding='same')
+        out = tf.nn.conv2d(out, self.kernel, strides=1, padding='VALID')
         if self.skip_interpolate:
             return out
 
-        out = self.interpolate(out)
+        size = (tf.cast(out.shape[1] * self.scale, tf.int32), tf.cast(out.shape[2] * self.scale, tf.int32))
+        # out = tf.image.resize(out, (64, 64), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+        out = resize_nearest_neighbor(out, size)
+        # out = tf.keras.backend.resize_images(out, 0.25, 0.25, 'channels_last', interpolation='nearest')
+        # out = self.interpolate(out)
 
         return out
