@@ -76,6 +76,8 @@ class OcclusionAwareGenerator(nn.Module):
             else:
                 occlusion_map = None
             deformation = dense_motion['deformation']
+            # out [B, 256, 64, 64]
+            # deformation [B, 64, 64, 2]
             out = self.deform_input(out, deformation)
 
             if occlusion_map is not None:
@@ -86,10 +88,11 @@ class OcclusionAwareGenerator(nn.Module):
             output_dict["deformed"] = self.deform_input(source_image, deformation)
 
         # Decoding part
-        out = self.bottleneck(out)
+        out = self.bottleneck(out)  # B, 256, 64, 64
         for i in range(len(self.up_blocks)):
             out = self.up_blocks[i](out)
-        out = self.final(out)
+        # B, 64, 256, 256
+        out = self.final(out)  # B, 3, 256, 256
         out = torch.sigmoid(out)
 
         output_dict["prediction"] = out

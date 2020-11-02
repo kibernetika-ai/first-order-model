@@ -42,36 +42,36 @@ class DenseMotionNetwork(nn.Module):
         zeros = torch.zeros(heatmap.shape[0], 1, spatial_size[0], spatial_size[1]).type(heatmap.type())
         heatmap = torch.cat([zeros, heatmap], dim=1)
         heatmap = heatmap.unsqueeze(2)
-        return heatmap
+        return heatmap  # B, 11, 1, 64, 64
 
     def create_sparse_motions(self, source_image, kp_driving, kp_source):
         """
         Eq 4. in the paper T_{s<-d}(z)
         """
         bs, _, h, w = source_image.shape
-        identity_grid = make_coordinate_grid((h, w), type=kp_source['value'].type())
-        identity_grid = identity_grid.view(1, 1, h, w, 2)
-        coordinate_grid = identity_grid - kp_driving['value'].view(bs, self.num_kp, 1, 1, 2)
+        identity_grid = make_coordinate_grid((h, w), type=kp_source['value'].type())  # 64, 64, 2
+        identity_grid = identity_grid.view(1, 1, h, w, 2)  # 1, 1, 64, 64, 2
+        coordinate_grid = identity_grid - kp_driving['value'].view(bs, self.num_kp, 1, 1, 2)  # B, 10, 64, 64, 2
         if 'jacobian' in kp_driving:
-            jacobian = torch.matmul(kp_source['jacobian'], torch.inverse(kp_driving['jacobian']))
-            jacobian = jacobian.unsqueeze(-3).unsqueeze(-3)
-            jacobian = jacobian.repeat(1, 1, h, w, 1, 1)
-            coordinate_grid = torch.matmul(jacobian, coordinate_grid.unsqueeze(-1))
-            coordinate_grid = coordinate_grid.squeeze(-1)
+            jacobian = torch.matmul(kp_source['jacobian'], torch.inverse(kp_driving['jacobian']))  # B, 10, 2, 2
+            jacobian = jacobian.unsqueeze(-3).unsqueeze(-3)  # B, 10, 1, 1, 2, 2
+            jacobian = jacobian.repeat(1, 1, h, w, 1, 1)  # B, 10, 64, 64, 2, 2
+            coordinate_grid = torch.matmul(jacobian, coordinate_grid.unsqueeze(-1))  # B, 10, 64, 64, 2, 1
+            coordinate_grid = coordinate_grid.squeeze(-1)  # B, 10, 64, 64, 2
 
-        driving_to_source = coordinate_grid + kp_source['value'].view(bs, self.num_kp, 1, 1, 2)
+        driving_to_source = coordinate_grid + kp_source['value'].view(bs, self.num_kp, 1, 1, 2)  # B, 10, 64, 64, 2
 
         #adding background feature
-        identity_grid = identity_grid.repeat(bs, 1, 1, 1, 1)
-        sparse_motions = torch.cat([identity_grid, driving_to_source], dim=1)
+        identity_grid = identity_grid.repeat(bs, 1, 1, 1, 1)  # B, 1, 64, 64, 2
+        sparse_motions = torch.cat([identity_grid, driving_to_source], dim=1)  # B, 11, 64, 64, 2
         return sparse_motions
 
     def create_deformed_source_image(self, source_image, sparse_motions):
         """
         Eq 7. in the paper \hat{T}_{s<-d}(z)
         """
-        bs, _, h, w = source_image.shape
-        source_repeat = source_image.unsqueeze(1).unsqueeze(1).repeat(1, self.num_kp + 1, 1, 1, 1, 1)
+        bs, _, h, w = source_image.shape  # B, 3, 64, 64
+        source_repeat = source_image.unsqueeze(1).unsqueeze(1).repeat(1, self.num_kp + 1, 1, 1, 1, 1)  # B, 11, 1, 3, 64, 64
         source_repeat = source_repeat.view(bs * (self.num_kp + 1), -1, h, w)
         sparse_motions = sparse_motions.view((bs * (self.num_kp + 1), h, w, -1))
         sparse_deformed = F.grid_sample(source_repeat, sparse_motions)
@@ -85,29 +85,29 @@ class DenseMotionNetwork(nn.Module):
         bs, _, h, w = source_image.shape
 
         out_dict = dict()
-        heatmap_representation = self.create_heatmap_representations(source_image, kp_driving, kp_source)
-        sparse_motion = self.create_sparse_motions(source_image, kp_driving, kp_source)
-        deformed_source = self.create_deformed_source_image(source_image, sparse_motion)
+        heatmap_representation = self.create_heatmap_representations(source_image, kp_driving, kp_source)  # B, 11, 1, 64, 64
+        sparse_motion = self.create_sparse_motions(source_image, kp_driving, kp_source)  # B, 11, 64, 64, 2
+        deformed_source = self.create_deformed_source_image(source_image, sparse_motion)  # B, 11, 3, 64, 64
         out_dict['sparse_deformed'] = deformed_source
 
         input = torch.cat([heatmap_representation, deformed_source], dim=2)
-        input = input.view(bs, -1, h, w)
+        input = input.view(bs, -1, h, w)  # B, 44, 64, 64
 
-        prediction = self.hourglass(input)
+        prediction = self.hourglass(input)  # B, 108, 64, 64
 
-        mask = self.mask(prediction)
-        mask = F.softmax(mask, dim=1)
+        mask = self.mask(prediction)  # B, 11, 64, 64
+        mask = F.softmax(mask, dim=1)  # B, 11, 64, 64
         out_dict['mask'] = mask
-        mask = mask.unsqueeze(2)
-        sparse_motion = sparse_motion.permute(0, 1, 4, 2, 3)
+        mask = mask.unsqueeze(2)  # B, 11, 1, 64, 64
+        sparse_motion = sparse_motion.permute(0, 1, 4, 2, 3)  # B, 11, 2, 64, 64
         deformation = (sparse_motion * mask).sum(dim=1)
-        deformation = deformation.permute(0, 2, 3, 1)
+        deformation = deformation.permute(0, 2, 3, 1) # B, 64, 64, 2
 
         out_dict['deformation'] = deformation
 
         # Sec. 3.2 in the paper
         if self.occlusion:
-            occlusion_map = torch.sigmoid(self.occlusion(prediction))
+            occlusion_map = torch.sigmoid(self.occlusion(prediction))  # B, 1, 64, 64
             out_dict['occlusion_map'] = occlusion_map
 
         return out_dict

@@ -86,7 +86,7 @@ class FramesDataset(Dataset):
         self.videos = os.listdir(root_dir)
         self.frame_shape = tuple(frame_shape)
         if pairs_list:
-            self.pairs_list = os.path.join(data_dir, pairs_list)
+            self.pairs_list = os.path.join(self.root_dir, pairs_list)
         else:
             pairs_list = None
         self.id_sampling = id_sampling
