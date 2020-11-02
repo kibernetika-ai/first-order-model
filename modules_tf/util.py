@@ -79,7 +79,7 @@ class UpBlock2d(layers.Layer):
     def __init__(self, out_features, kernel_size=(3, 3), groups=1):
         super(UpBlock2d, self).__init__()
 
-        self.conv = layers.Conv2D(out_features, kernel_size=kernel_size, padding='same', groups=groups)
+        self.conv = layers.Conv2D(out_features, kernel_size=kernel_size, padding='same')
         self.norm = layers.BatchNormalization()
         self.up = layers.UpSampling2D()
 
@@ -126,7 +126,7 @@ class DownBlock2d(layers.Layer):
 
     def __init__(self, out_features, kernel_size=3, groups=1):
         super(DownBlock2d, self).__init__()
-        self.conv = layers.Conv2D(out_features, kernel_size=kernel_size, padding='same', groups=groups)
+        self.conv = layers.Conv2D(out_features, kernel_size=kernel_size, padding='same')
         self.norm = layers.BatchNormalization()
         self.pool = layers.AvgPool2D(pool_size=(2, 2))
 
@@ -208,7 +208,7 @@ class Decoder(layers.Layer):
         for i in range(self.num_blocks)[::-1]:
             out = getattr(self, f'up_block{i}')(out)
             skip = x.pop()
-            out = tf.concat([out, skip], axis=1)
+            out = tf.concat([out, skip], axis=3)
         return out
 
 
