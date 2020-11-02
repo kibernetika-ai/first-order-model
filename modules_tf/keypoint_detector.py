@@ -16,12 +16,12 @@ class KPDetector(tf.keras.Model):
         self.predictor = Hourglass(block_expansion, in_features=num_channels,
                                    max_features=max_features, num_blocks=num_blocks)
 
-        self.kp = layers.Conv2D(num_kp, kernel_size=(7, 7), padding='same')
+        self.kp = layers.Conv2D(num_kp, kernel_size=(7, 7), padding='valid')
 
         if estimate_jacobian:
             self.num_jacobian_maps = 1 if single_jacobian_map else num_kp
             self.jacobian = layers.Conv2D(
-                4 * self.num_jacobian_maps, kernel_size=(7, 7), padding='same', kernel_initializer='zeros'
+                4 * self.num_jacobian_maps, kernel_size=(7, 7), padding='VALID', kernel_initializer='zeros'
             )
             # self.jacobian.weight.data.zero_()
             # self.jacobian.bias.data.copy_(torch.tensor([1, 0, 0, 1] * self.num_jacobian_maps, dtype=torch.float))
@@ -37,44 +37,42 @@ class KPDetector(tf.keras.Model):
         """
         Extract the mean and from a heatmap
         """
-        shape = heatmap.shape
-        heatmap = tf.expand_dims(heatmap, -1)
-        grid = tf.expand_dims(make_coordinate_grid(shape[2:], heatmap.dtype), 0)
-        grid = tf.expand_dims(grid, -1)
-        value = tf.reduce_sum(heatmap * grid, axis=[1, 2])
-        kp = {'value': value}
+        shape = heatmap.shape  # B, 58, 58, 10
+        heatmap = tf.expand_dims(heatmap, -1)  # B, 58, 58, 10, 1
+        grid = tf.expand_dims(make_coordinate_grid(shape[1:3], heatmap.dtype), 0)  # 1, 58, 58, 2
+        grid = tf.expand_dims(grid, 3)  # 1, 58, 58, 1, 2
+        value = tf.reduce_sum(heatmap * grid, axis=[1, 2])  # B, 10, 2
 
-        return kp
+        return value
 
     def call(self, x, training=None, mask=None):
         # if self.scale_factor != 1:
         x = self.down(x)
 
-        feature_map = self.predictor(x)
-        prediction = self.kp(feature_map)
+        feature_map = self.predictor(x)  # B, 35, 64, 64
+        prediction = self.kp(feature_map)  # B, 58, 58, 10
 
-        final_shape = prediction.shape
-        heatmap = tf.reshape(prediction, [final_shape[0], -1, final_shape[1]])  # [N, HxW, C]
+        final_shape = prediction.shape  # B, 58, 58, 10
+        heatmap = tf.reshape(prediction, [final_shape[0], -1, final_shape[-1]])  # [N, HxW, C]
         heatmap = tf.nn.softmax(heatmap / self.temperature, axis=1)  # [N, HxW, C]
-        heatmap = tf.reshape(heatmap, [*final_shape])  # [N, H, W, C]
+        heatmap = tf.reshape(heatmap, [*final_shape])  # B, 58, 58, 10
 
-        out = self.gaussian2kp(heatmap)
+        out = self.gaussian2kp(heatmap)  # B, 10, 2
 
         if self.jacobian is not None:
-            jacobian_map = self.jacobian(feature_map)
+            jacobian_map = self.jacobian(feature_map)  # B, 58, 58, 40
             jacobian_map = tf.reshape(
                 jacobian_map,
-                [final_shape[0], self.num_jacobian_maps, 4, final_shape[2], final_shape[3]]
-            )
-            heatmap = tf.expand_dims(heatmap, 2)
+                [final_shape[0], final_shape[1], final_shape[2], self.num_jacobian_maps, 4]
+            )  # B, 58, 58, num_kp, 4
+            heatmap = tf.expand_dims(heatmap, -1)
 
             jacobian = heatmap * jacobian_map
-            jacobian = tf.reshape(jacobian, [final_shape[0], final_shape[1], 4, -1])
-            jacobian = tf.reduce_sum(jacobian, axis=-1)
-            jacobian = tf.reshape(jacobian, [jacobian.shape[0], jacobian.shape[1], 2, 2])
-            out['jacobian'] = jacobian
+            jacobian = tf.reshape(jacobian, [final_shape[0], -1, final_shape[3], 4])  # B, HxW, num_kp, 4
+            jacobian = tf.reduce_sum(jacobian, axis=1)  # B, num_kp, 4
+            jacobian = tf.reshape(jacobian, [jacobian.shape[0], jacobian.shape[1], 2, 2])  # B, num_kp, 2, 2
 
-        return out
+        return out, jacobian
 
     def forward_script(self, x):
         if self.scale_factor != 1:

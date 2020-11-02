@@ -103,10 +103,10 @@ class KPDetector(nn.Module):
         """
         Extract the mean and from a heatmap
         """
-        shape = heatmap.shape
-        heatmap = heatmap.unsqueeze(-1)
-        grid = make_coordinate_grid(shape[2:], heatmap.type()).unsqueeze_(0).unsqueeze_(0)
-        value = (heatmap * grid).sum(dim=(2, 3))
+        shape = heatmap.shape  # B, 10, 58, 58
+        heatmap = heatmap.unsqueeze(-1)  # B, 10, 58, 58, 1
+        grid = make_coordinate_grid(shape[2:], heatmap.type()).unsqueeze_(0).unsqueeze_(0)  # 1, 1, 58, 58, 2
+        value = (heatmap * grid).sum(dim=(2, 3))  # B, 10, 2
         kp = {'value': value}
 
         return kp

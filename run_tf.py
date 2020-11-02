@@ -124,7 +124,7 @@ def main():
 
     if opt.mode == 'train':
         LOG.info("Training...")
-        train(config, generator, discriminator, kp_detector, opt.checkpoint, log_dir, dataset, opt.device_ids)
+        train(config, generator, discriminator, kp_detector, opt.checkpoint, log_dir, dataset)
     elif opt.mode == 'reconstruction':
         LOG.info("Reconstruction...")
         reconstruction(config, generator, kp_detector, opt.checkpoint, log_dir, dataset)
@@ -133,16 +133,23 @@ def main():
         animate(config, generator, kp_detector, opt.checkpoint, log_dir, dataset)
 
 
-def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, dataset, device_ids):
+def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, dataset):
     train_params = config['train_params']
 
     input_fn = dataset.get_input_fn(train_params['batch_size'])
-    optimizer_generator = torch.optim.Adam(generator.parameters(), lr=train_params['lr_generator'], betas=(0.5, 0.999))
-    optimizer_discriminator = torch.optim.Adam(discriminator.parameters(), lr=train_params['lr_discriminator'],
-                                               betas=(0.5, 0.999))
-    optimizer_kp_detector = torch.optim.Adam(kp_detector.parameters(), lr=train_params['lr_kp_detector'],
-                                             betas=(0.5, 0.999))
-
+    optimizer_generator = tf.keras.optimizers.Adam(
+        learning_rate=train_params['lr_generator'], beta_1=0.5, beta_2=0.999
+    )
+    optimizer_discriminator = tf.keras.optimizers.Adam(
+        learning_rate=train_params['lr_discriminator'], beta_1=0.5, beta_2=0.999
+    )
+    optimizer_kp_detector = tf.keras.optimizers.Adam(
+        learning_rate=train_params['lr_kp_detector'], beta_1=0.5, beta_2=0.999
+    )
+    import numpy as np
+    kp, jacobian = kp_detector(np.zeros([1, 256, 256, 3]).astype(np.float32))
+    print(kp.shape, jacobian.shape)
+    __import__('ipdb').set_trace()
     if checkpoint is not None:
         start_epoch = Logger.load_cpk(checkpoint, generator, discriminator, kp_detector,
                                       optimizer_generator, optimizer_discriminator,
@@ -171,9 +178,9 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
     generator_full = GeneratorFullModel(kp_detector, generator, discriminator, train_params)
     discriminator_full = DiscriminatorFullModel(kp_detector, generator, discriminator, train_params)
 
-    if torch.cuda.is_available():
-        generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)
-        discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
+    # if torch.cuda.is_available():
+    #     generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)
+    #     discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
 
     writer = tensorboardX.SummaryWriter(log_dir, flush_secs=60)
 
