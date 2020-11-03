@@ -142,13 +142,19 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
     train_params = config['train_params']
 
     step_var = tf.Variable(initial_value=0, dtype=tf.int32)
-    checkpoint = tf.train.Checkpoint(kp_detector=kp_detector, step_var=step_var)
+    checkpoint = tf.train.Checkpoint(
+        kp_detector=kp_detector,
+        generator=generator,
+        discriminator=discriminator,
+        step_var=step_var
+    )
     manager = tf.train.CheckpointManager(checkpoint, log_dir, max_to_keep=3)
     manager.restore_or_initialize()
 
-    LOG.info(f'Initialized at {step_var.numpy()} step.')
-    if manager.step_var.numpy() != 0:
-        LOG.info(f'Initialized at {step_var.numpy()} step.')
+    LOG.info(f'Initialized at {manager.checkpoint.step_var.numpy()} step.')
+    if manager.checkpoint.step_var.numpy() != 0:
+        LOG.info(f'Initialized at {manager.checkpoint.step_var.numpy()} step.')
+    __import__('ipdb').set_trace()
 
     input_fn = dataset.get_input_fn(train_params['batch_size'])
     optimizer_generator = tf.keras.optimizers.Adam(

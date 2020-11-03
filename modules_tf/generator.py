@@ -65,7 +65,8 @@ class OcclusionAwareGenerator(tf.keras.Model):
             deformation = deformation.permute(0, 3, 1, 2)
         return bilinear_sampler(inp, deformation[:, 0, :, :], deformation[:, 1, :, :])
 
-    def forward(self, source_image, kp_driving, kp_source):
+    def call(self, inputs, training=None, mask=None):
+        source_image, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian = inputs
         # Encoding (downsampling) part
         out = self.first(source_image)
         for i in range(len(self.num_down_blocks)):
@@ -74,8 +75,9 @@ class OcclusionAwareGenerator(tf.keras.Model):
 
         # Transforming feature representation according to deformation and occlusion
         output_dict = {}
-        dense_motion = self.dense_motion_network(source_image=source_image, kp_driving=kp_driving,
-                                                 kp_source=kp_source)
+        dense_motion = self.dense_motion_network(
+            (source_image, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian)
+        )
         output_dict['mask'] = dense_motion['mask']
         output_dict['sparse_deformed'] = dense_motion['sparse_deformed']
 

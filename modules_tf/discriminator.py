@@ -12,7 +12,7 @@ class DownBlock2d(layers.Layer):
 
     def __init__(self, out_features, norm=False, kernel_size=4, pool=False, sn=False):
         super(DownBlock2d, self).__init__()
-        self.conv = layers.Conv2D(out_features, kernel_size=kernel_size)
+        self.conv = layers.Conv2D(out_features, kernel_size=kernel_size, padding='SAME')
 
         if sn:
             self.conv = addons_layers.SpectralNormalization(self.conv)
@@ -36,7 +36,7 @@ class DownBlock2d(layers.Layer):
         return out
 
 
-class Discriminator(tf.keras.Model):
+class Discriminator(layers.Layer):
     """
     Discriminator similar to Pix2Pix
     """
@@ -53,18 +53,18 @@ class Discriminator(tf.keras.Model):
             )
             setattr(self, f'down_block{i}', block)
 
-        self.conv = layers.Conv2D(1, kernel_size=1)
+        self.conv = layers.Conv2D(1, kernel_size=1, padding='SAME')
         if sn:
             self.conv = addons_layers.SpectralNormalization(self.conv)
         self.use_kp = use_kp
         self.kp_variance = kp_variance
 
-    def call(self, x, kp=None, training=None, mask=None):
+    def call(self, inputs, training=None, mask=None):
+        x, kp_value = inputs
         feature_maps = []
         out = x
-        if self.use_kp:
-            heatmap = kp2gaussian(kp, x.shape[2:], self.kp_variance)
-            out = tf.concat([out, heatmap], axis=-1)
+        heatmap = kp2gaussian(kp_value, x.shape[1:3], self.kp_variance)
+        out = tf.concat([out, heatmap], axis=-1)
 
         for i in range(self.num_blocks):
             res = getattr(self, f'down_block{i}')(out)
@@ -84,14 +84,15 @@ class MultiScaleDiscriminator(tf.keras.Model):
         super(MultiScaleDiscriminator, self).__init__()
         self.scales = scales
         for scale in scales:
-            setattr(self, str(scale).replace('.', '-'), Discriminator(**kwargs))
+            setattr(self, f'scale_{str(scale).replace(".", "-")}', Discriminator(**kwargs))
 
-    def call(self, x, kp=None, is_training=True, **kwargs):
+    def call(self, inputs, is_training=True, **kwargs):
+        x, kp_value = inputs
         out_dict = {}
         for scale in self.scales:
-            disc = getattr(self, str(scale).replace('.', '-'))
+            disc = getattr(self, f'scale_{str(scale).replace(".", "-")}')
             key = 'prediction_' + scale
-            feature_maps, prediction_map = disc(x[key], kp)
+            feature_maps, prediction_map = disc(x[key], kp_value)
             out_dict['feature_maps_' + scale] = feature_maps
             out_dict['prediction_map_' + scale] = prediction_map
         return out_dict

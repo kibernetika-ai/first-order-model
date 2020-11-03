@@ -7,22 +7,22 @@ def kp2gaussian(kp_value, spatial_size, kp_variance):
     """
     Transform a keypoint into gaussian like representation
     """
-    mean = kp_value
+    mean = kp_value  # B, 10, 2
 
-    coordinate_grid = make_coordinate_grid(spatial_size, mean.type())
-    number_of_leading_dimensions = len(mean.shape) - 1
-    shape = (1,) * number_of_leading_dimensions + coordinate_grid.shape
-    coordinate_grid = tf.reshape(coordinate_grid, [*shape])
-    repeats = mean.shape[:number_of_leading_dimensions] + (1, 1, 1)
-    coordinate_grid = tf.tile(coordinate_grid, [*repeats])
+    coordinate_grid = make_coordinate_grid(spatial_size, mean.dtype)  # 64, 64, 2
+    coordinate_grid = tf.reshape(
+        coordinate_grid,
+        [1, coordinate_grid.shape[0], coordinate_grid.shape[1], 1, 2]
+    )  # 1, 64, 64, 1, 2
+    repeats = [mean.shape[0], 1, 1, mean.shape[1], 1]  # B, 1, 1, 10, 1
+    coordinate_grid = tf.tile(coordinate_grid, [*repeats])  # B, 64, 64, 10, 2
 
     # Preprocess kp shape
-    shape = mean.shape[:number_of_leading_dimensions] + (1, 1, 2)
-    mean = tf.reshape(mean, [*shape])
+    mean = tf.reshape(mean, [mean.shape[0], 1, 1, mean.shape[1], mean.shape[2]])  # B, 1, 1, 10, 2
 
-    mean_sub = (coordinate_grid - mean)
+    mean_sub = (coordinate_grid - mean)  # B, 64, 64, 10, 2
 
-    out = tf.exp(-0.5 * tf.reduce_sum(mean_sub ** 2, -1) / kp_variance)
+    out = tf.exp(-0.5 * tf.reduce_sum(mean_sub ** 2, -1) / kp_variance)  # B, 64, 64, 10
 
     return out
 

@@ -5,7 +5,7 @@ from tensorflow.keras import layers
 from modules_tf.util import Hourglass, AntiAliasInterpolation2d, make_coordinate_grid, kp2gaussian
 
 
-class DenseMotionNetwork(tf.keras.Model):
+class DenseMotionNetwork(layers.Layer):
     """
     Module that predicting a dense motion from sparse motion representation given by kp_source and kp_driving
     """
@@ -99,8 +99,8 @@ class DenseMotionNetwork(tf.keras.Model):
         sparse_deformed = tf.transpose(sparse_deformed, [0, 2, 3, 1, 4])  # B, 64, 64, 11, 3
         return sparse_deformed
 
-    def forward(self, source_image, kp_driving_value, kp_driving_jacobian,
-                kp_source_value, kp_source_jacobian):
+    def call(self, inputs, **kwargs):
+        source_image, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian = inputs
         if self.scale_factor != 1:
             source_image = self.down(source_image)
 

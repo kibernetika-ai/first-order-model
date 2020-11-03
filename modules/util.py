@@ -12,20 +12,20 @@ def kp2gaussian(kp, spatial_size, kp_variance):
     """
     mean = kp['value']
 
-    coordinate_grid = make_coordinate_grid(spatial_size, mean.type())
+    coordinate_grid = make_coordinate_grid(spatial_size, mean.type())  # 64, 64, 2
     number_of_leading_dimensions = len(mean.shape) - 1
-    shape = (1,) * number_of_leading_dimensions + coordinate_grid.shape
-    coordinate_grid = coordinate_grid.view(*shape)
-    repeats = mean.shape[:number_of_leading_dimensions] + (1, 1, 1)
-    coordinate_grid = coordinate_grid.repeat(*repeats)
+    shape = (1,) * number_of_leading_dimensions + coordinate_grid.shape  # 1, 1, 64, 64, 2
+    coordinate_grid = coordinate_grid.view(*shape)  # 1, 1, 64, 64, 2
+    repeats = mean.shape[:number_of_leading_dimensions] + (1, 1, 1)  # B, 10, 1, 1, 1
+    coordinate_grid = coordinate_grid.repeat(*repeats)  # B, 10, 64, 64, 2
 
     # Preprocess kp shape
-    shape = mean.shape[:number_of_leading_dimensions] + (1, 1, 2)
-    mean = mean.view(*shape)
+    shape = mean.shape[:number_of_leading_dimensions] + (1, 1, 2)  # B, 10, 1, 1, 2
+    mean = mean.view(*shape)  # B, 10, 1, 1, 2
 
-    mean_sub = (coordinate_grid - mean)
+    mean_sub = (coordinate_grid - mean)  # B, 10, 64, 64, 2
 
-    out = torch.exp(-0.5 * (mean_sub ** 2).sum(-1) / kp_variance)
+    out = torch.exp(-0.5 * (mean_sub ** 2).sum(-1) / kp_variance)  # B, 10, 64, 64
 
     return out
 
