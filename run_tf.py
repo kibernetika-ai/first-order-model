@@ -93,28 +93,33 @@ def main():
     # elif opt.num_kp:
     #     config['model_params']['common_params']['num_kp'] = opt.num_kp
 
-    generator = OcclusionAwareGenerator(**config['model_params']['generator_params'],
-                                        **config['model_params']['common_params'])
+    generator = OcclusionAwareGenerator(
+        **config['model_params']['generator_params'],
+        **config['model_params']['common_params']
+    )
 
     if opt.verbose:
-        LOG.info(generator)
+        LOG.info(generator.summary())
 
-    discriminator = MultiScaleDiscriminator(**config['model_params']['discriminator_params'],
-                                            **config['model_params']['common_params'])
+    discriminator = MultiScaleDiscriminator(
+        **config['model_params']['discriminator_params'],
+        **config['model_params']['common_params']
+    )
     if opt.verbose:
-        LOG.info(discriminator)
+        LOG.info(discriminator.summary())
 
-    kp_detector = KPDetector(**config['model_params']['kp_detector_params'],
-                             **config['model_params']['common_params'])
+    kp_detector = KPDetector(
+        **config['model_params']['kp_detector_params'],
+        **config['model_params']['common_params']
+    )
 
     if opt.verbose:
-        LOG.info(kp_detector)
+        LOG.info(kp_detector.summary())
 
     dataset = FramesDataset(
         is_train=(opt.mode == 'train'),
         **config['dataset_params']
     )
-    # dataset = FramesDataset(is_train=(opt.mode == 'train'), **config['dataset_params'])
     LOG.info(f'Dataset length: {len(dataset)}')
 
     if not os.path.exists(log_dir):
