@@ -1,11 +1,13 @@
-import torch
-from torch import nn
-import torch.nn.functional as F
-from modules.util import ResBlock2d, SameBlock2d, UpBlock2d, DownBlock2d
-from modules.dense_motion import DenseMotionNetwork
+from stn.transformer import bilinear_sampler
+import tensorflow as tf
+from tensorflow.keras import layers
+from tensorflow.python.ops.gen_image_ops import resize_bilinear
+
+from modules_tf.util import ResBlock2d, SameBlock2d, UpBlock2d, DownBlock2d
+from modules_tf.dense_motion import DenseMotionNetwork
 
 
-class OcclusionAwareGenerator(nn.Module):
+class OcclusionAwareGenerator(tf.keras.Model):
     """
     Generator that given source image and and keypoints try to transform image according to movement trajectories
     induced by keypoints. Generator follows Johnson architecture.
@@ -23,28 +25,26 @@ class OcclusionAwareGenerator(nn.Module):
         else:
             self.dense_motion_network = None
 
-        self.first = SameBlock2d(num_channels, block_expansion, kernel_size=(7, 7), padding=(3, 3))
+        self.first = SameBlock2d(block_expansion, kernel_size=(7, 7))
 
-        down_blocks = []
+        self.num_down_blocks = num_down_blocks
         for i in range(num_down_blocks):
-            in_features = min(max_features, block_expansion * (2 ** i))
             out_features = min(max_features, block_expansion * (2 ** (i + 1)))
-            down_blocks.append(DownBlock2d(in_features, out_features, kernel_size=(3, 3), padding=(1, 1)))
-        self.down_blocks = nn.ModuleList(down_blocks)
+            block = DownBlock2d(out_features, kernel_size=(3, 3))
+            setattr(self, f'down_block{i}', block)
 
-        up_blocks = []
+        self.num_up_blocks = num_down_blocks
         for i in range(num_down_blocks):
-            in_features = min(max_features, block_expansion * (2 ** (num_down_blocks - i)))
             out_features = min(max_features, block_expansion * (2 ** (num_down_blocks - i - 1)))
-            up_blocks.append(UpBlock2d(in_features, out_features, kernel_size=(3, 3), padding=(1, 1)))
-        self.up_blocks = nn.ModuleList(up_blocks)
+            block = UpBlock2d(out_features, kernel_size=(3, 3))
+            setattr(self, f'up_block{i}', block)
 
-        self.bottleneck = torch.nn.Sequential()
+        self.bottleneck = tf.keras.Sequential()
         in_features = min(max_features, block_expansion * (2 ** num_down_blocks))
         for i in range(num_bottleneck_blocks):
-            self.bottleneck.add_module('r' + str(i), ResBlock2d(in_features, kernel_size=(3, 3), padding=(1, 1)))
+            self.bottleneck.add(ResBlock2d(in_features, kernel_size=(3, 3), padding=(1, 1)))
 
-        self.final = nn.Conv2d(block_expansion, num_channels, kernel_size=(7, 7), padding=(3, 3))
+        self.final = layers.Conv2D(num_channels, kernel_size=(7, 7), padding='SAME')
         self.estimate_occlusion_map = estimate_occlusion_map
         self.num_channels = num_channels
 
@@ -57,50 +57,53 @@ class OcclusionAwareGenerator(nn.Module):
         self.dense_motion_network.clean_up()
 
     def deform_input(self, inp, deformation):
-        _, h_old, w_old, _ = deformation.shape
-        _, _, h, w = inp.shape
+        _, h_old, w_old, _ = deformation.shape  # B, 64, 64, 2
+        _, h, w, _ = inp.shape
         if h_old != h or w_old != w:
+            # deformation = deformation.permute(0, 3, 1, 2)
+            deformation = resize_bilinear(deformation, size=(h, w))
             deformation = deformation.permute(0, 3, 1, 2)
-            deformation = F.interpolate(deformation, size=(h, w), mode='bilinear')
-            deformation = deformation.permute(0, 2, 3, 1)
-        return F.grid_sample(inp, deformation)
+        return bilinear_sampler(inp, deformation[:, 0, :, :], deformation[:, 1, :, :])
 
     def forward(self, source_image, kp_driving, kp_source):
         # Encoding (downsampling) part
         out = self.first(source_image)
-        for i in range(len(self.down_blocks)):
-            out = self.down_blocks[i](out)
+        for i in range(len(self.num_down_blocks)):
+            down_block = getattr(self, f'down_block{i}')
+            out = down_block(out)
 
         # Transforming feature representation according to deformation and occlusion
         output_dict = {}
-        if self.dense_motion_network is not None:
-            dense_motion = self.dense_motion_network(source_image=source_image, kp_driving=kp_driving,
-                                                     kp_source=kp_source)
-            output_dict['mask'] = dense_motion['mask']
-            output_dict['sparse_deformed'] = dense_motion['sparse_deformed']
+        dense_motion = self.dense_motion_network(source_image=source_image, kp_driving=kp_driving,
+                                                 kp_source=kp_source)
+        output_dict['mask'] = dense_motion['mask']
+        output_dict['sparse_deformed'] = dense_motion['sparse_deformed']
 
-            if 'occlusion_map' in dense_motion:
-                occlusion_map = dense_motion['occlusion_map']
-                output_dict['occlusion_map'] = occlusion_map
-            else:
-                occlusion_map = None
-            deformation = dense_motion['deformation']
-            out = self.deform_input(out, deformation)
+        occlusion_map = dense_motion['occlusion_map']
+        output_dict['occlusion_map'] = occlusion_map
 
-            if occlusion_map is not None:
+        deformation = dense_motion['deformation']
+        # out [B, 64, 64, 256]
+        # deformation [B, 64, 64, 2]
+        out = self.deform_input(out, deformation)  # B, 64, 64, 256
 
-                if out.shape[2] != occlusion_map.shape[2] or out.shape[3] != occlusion_map.shape[3]:
-                    occlusion_map = F.interpolate(occlusion_map, size=out.shape[2:], mode='bilinear')
-                out = out * occlusion_map
+        # if out.shape[1] != occlusion_map.shape[1] or out.shape[2] != occlusion_map.shape[2]:
+        print(occlusion_map.shape)
+        print(out.shape)
+        occlusion_map = resize_bilinear(occlusion_map, (out.shape[1:3]))
+        # occlusion_map = F.interpolate(occlusion_map, size=out.shape[2:], mode='bilinear')
+        out = out * occlusion_map
 
-            output_dict["deformed"] = self.deform_input(source_image, deformation)
+        output_dict["deformed"] = self.deform_input(source_image, deformation)
 
         # Decoding part
-        out = self.bottleneck(out)
-        for i in range(len(self.up_blocks)):
-            out = self.up_blocks[i](out)
-        out = self.final(out)
-        out = F.sigmoid(out)
+        out = self.bottleneck(out)  # B, 64, 64, 256
+        for i in range(len(self.num_up_blocks)):
+            up_block = getattr(self, f'up_block{i}')
+            out = up_block(out)
+        # B, 256, 256, 64
+        out = self.final(out)  # B, 256, 256, 3
+        out = tf.nn.sigmoid(out)
 
         output_dict["prediction"] = out
 
@@ -114,73 +117,23 @@ class OcclusionAwareGenerator(nn.Module):
         return out, scaled_image
 
     def forward_step(self, out, source_image, kp_new_value, kp_new_jacobian, kp_source_value, kp_source_jacobian):
-        kp_driving = {'value': kp_new_value, 'jacobian': kp_new_jacobian}
-        kp_source = {'value': kp_source_value, 'jacobian': kp_source_jacobian}
-        if self.dense_motion_network is not None:
-            dense_motion = self.dense_motion_network.forward_step(source_image, kp_driving, kp_source)
-            if 'occlusion_map' in dense_motion:
-                occlusion_map = dense_motion['occlusion_map']
-            else:
-                occlusion_map = None
-            deformation = dense_motion['deformation']
-            out = self.deform_input(out, deformation)
+        dense_motion = self.dense_motion_network.forward_step(
+            source_image, kp_new_value, kp_new_jacobian, kp_source_value, kp_source_jacobian
+        )
+        occlusion_map = dense_motion['occlusion_map']
 
-            if occlusion_map is not None:
-                if out.shape[2] != occlusion_map.shape[2] or out.shape[3] != occlusion_map.shape[3]:
-                    occlusion_map = F.interpolate(occlusion_map, size=out.shape[2:], mode='bilinear')
-                out = out * occlusion_map
+        deformation = dense_motion['deformation']
+        out = self.deform_input(out, deformation)
+
+        occlusion_map = resize_bilinear(occlusion_map, (out.shape[1:3]))
+        out = out * occlusion_map
 
         # Decoding part
-        out = self.bottleneck(out)
-        for i in range(len(self.up_blocks)):
-            out = self.up_blocks[i](out)
-        out = self.final(out)
-        out = F.sigmoid(out)
-        return out
-
-    def forward_g1(self, source_image, source_image_padded):
-        out = self.first(source_image)
-        for i in range(len(self.down_blocks)):
-            out = self.down_blocks[i](out)
-        self.dense_motion_network.down.skip_padding = True
-        self.dense_motion_network.down.skip_interpolate = True
-        source_image_padded = self.dense_motion_network.down(source_image_padded)
-        return out, source_image_padded
-
-    def forward_g2(self, source_image, kp_driving, kp_source, kp_initial, adaptive_scale):
-        kp_driving_value, kp_driving_jacobian = torch.split(kp_driving, [1, 2], 3)
-        kp_driving_value = torch.squeeze(kp_driving_value, 3)
-
-        kp_source_value, kp_source_jacobian = torch.split(kp_source, [1, 2], 3)
-        kp_source_value = torch.squeeze(kp_source_value, 3)
-
-        kp_initial_value, kp_initial_jacobian = torch.split(kp_initial, [1, 2], 3)
-        kp_initial_value = torch.squeeze(kp_initial_value, 3)
-
-        kp_value_diff = (kp_driving_value - kp_initial_value)
-        kp_new = kp_value_diff * adaptive_scale + kp_source_value
-
-        jacobian_diff = torch.matmul(kp_driving_jacobian, torch.inverse(kp_initial_jacobian))
-        kp_new_jacobian = torch.matmul(jacobian_diff, kp_source_jacobian)
-
-        kp_driving = {'value': kp_new, 'jacobian': kp_new_jacobian}
-        kp_source = {'value': kp_source_value, 'jacobian': kp_source_jacobian}
-        return self.dense_motion_network.forward_g2(source_image, kp_driving, kp_source)
-
-    def forward_g3(self, input, sparse_motion):
-        return self.dense_motion_network.forward_g3(input, sparse_motion)
-
-    def forward_g4(self, out, deformation, occlusion_map):
-        out = self.deform_input(out, deformation)
-        if out.shape[2] != occlusion_map.shape[2] or out.shape[3] != occlusion_map.shape[3]:
-            occlusion_map = F.interpolate(occlusion_map, size=out.shape[2:], mode='bilinear')
-        out = out * occlusion_map
-        return out
-
-    def forward_g5(self, out):
-        out = self.bottleneck(out)
-        for i in range(len(self.up_blocks)):
-            out = self.up_blocks[i](out)
-        out = self.final(out)
-        out = F.sigmoid(out)
+        out = self.bottleneck(out)  # B, 64, 64, 256
+        for i in range(len(self.num_up_blocks)):
+            up_block = getattr(self, f'up_block{i}')
+            out = up_block(out)
+        # B, 256, 256, 64
+        out = self.final(out)  # B, 256, 256, 3
+        out = tf.nn.sigmoid(out)
         return out

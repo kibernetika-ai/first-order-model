@@ -124,7 +124,7 @@ class DownBlock2d(layers.Layer):
     Downsampling block for use in encoder.
     """
 
-    def __init__(self, out_features, kernel_size=3, groups=1):
+    def __init__(self, out_features, kernel_size=3):
         super(DownBlock2d, self).__init__()
         self.conv = layers.Conv2D(out_features, kernel_size=kernel_size, padding='same')
         self.norm = layers.BatchNormalization()
@@ -143,9 +143,9 @@ class SameBlock2d(layers.Layer):
     Simple block, preserve spatial resolution.
     """
 
-    def __init__(self, out_features, groups=1, kernel_size=3):
+    def __init__(self, out_features, kernel_size=3):
         super(SameBlock2d, self).__init__()
-        self.conv = layers.Conv2D(out_features, kernel_size=kernel_size, padding='same', groups=groups)
+        self.conv = layers.Conv2D(out_features, kernel_size=kernel_size, padding='same')
         self.norm = layers.BatchNormalization()
 
     def call(self, x, **kwargs):
@@ -263,7 +263,6 @@ class AntiAliasInterpolation2d(layers.Layer):
         self.scale = scale
         self.skip_padding = False
         self.skip_interpolate = False
-        self.interpolate = layers.UpSampling2D((self.scale, self.scale))
 
     def call(self, input, **kwargs):
         if self.scale == 1.0:
