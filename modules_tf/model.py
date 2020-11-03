@@ -1,70 +1,40 @@
-from torch import nn
+from stn.transformer import bilinear_sampler
+import tensorflow as tf
+from tensorflow.keras import layers
 import torch
-import torch.nn.functional as F
-from modules.util import AntiAliasInterpolation2d, make_coordinate_grid
-from torchvision import models
+from modules_tf.util import AntiAliasInterpolation2d, make_coordinate_grid
 import numpy as np
 from torch.autograd import grad
 
 
-class Vgg19(torch.nn.Module):
+vgg19_feat_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
+
+
+def VGG19(input_tensor=None, input_shape=(256, 256, 3)):
+    vgg19 = tf.keras.applications.VGG19(input_tensor=input_tensor, include_top=False, input_shape=input_shape)
+    outputs = []
+    for layer_name in vgg19_feat_layers:
+        outputs.append(vgg19.get_layer(layer_name).output)
+    model = tf.keras.Model(inputs=vgg19.input, outputs=outputs)
+
+    return model
+
+
+class ImagePyramid(layers.Layer):
     """
-    Vgg19 network for perceptual loss. See Sec 3.3.
-    """
-    def __init__(self, requires_grad=False):
-        super(Vgg19, self).__init__()
-        vgg_pretrained_features = models.vgg19(pretrained=True).features
-        self.slice1 = torch.nn.Sequential()
-        self.slice2 = torch.nn.Sequential()
-        self.slice3 = torch.nn.Sequential()
-        self.slice4 = torch.nn.Sequential()
-        self.slice5 = torch.nn.Sequential()
-        for x in range(2):
-            self.slice1.add_module(str(x), vgg_pretrained_features[x])
-        for x in range(2, 7):
-            self.slice2.add_module(str(x), vgg_pretrained_features[x])
-        for x in range(7, 12):
-            self.slice3.add_module(str(x), vgg_pretrained_features[x])
-        for x in range(12, 21):
-            self.slice4.add_module(str(x), vgg_pretrained_features[x])
-        for x in range(21, 30):
-            self.slice5.add_module(str(x), vgg_pretrained_features[x])
-
-        self.mean = torch.nn.Parameter(data=torch.Tensor(np.array([0.485, 0.456, 0.406]).reshape((1, 3, 1, 1))),
-                                       requires_grad=False)
-        self.std = torch.nn.Parameter(data=torch.Tensor(np.array([0.229, 0.224, 0.225]).reshape((1, 3, 1, 1))),
-                                      requires_grad=False)
-
-        if not requires_grad:
-            for param in self.parameters():
-                param.requires_grad = False
-
-    def forward(self, X):
-        X = (X - self.mean) / self.std
-        h_relu1 = self.slice1(X)
-        h_relu2 = self.slice2(h_relu1)
-        h_relu3 = self.slice3(h_relu2)
-        h_relu4 = self.slice4(h_relu3)
-        h_relu5 = self.slice5(h_relu4)
-        out = [h_relu1, h_relu2, h_relu3, h_relu4, h_relu5]
-        return out
-
-
-class ImagePyramide(torch.nn.Module):
-    """
-    Create image pyramide for computing pyramide perceptual loss. See Sec 3.3
+    Create image pyramid for computing pyramid perceptual loss. See Sec 3.3
     """
     def __init__(self, scales, num_channels):
-        super(ImagePyramide, self).__init__()
-        downs = {}
+        super(ImagePyramid, self).__init__()
+        self.scales = scales
         for scale in scales:
-            downs[str(scale).replace('.', '-')] = AntiAliasInterpolation2d(num_channels, scale)
-        self.downs = nn.ModuleDict(downs)
+            setattr(self, f'scale_{str(scale).replace(".", "-")}', AntiAliasInterpolation2d(num_channels, scale))
 
-    def forward(self, x):
+    def call(self, x, **kwargs):
         out_dict = {}
-        for scale, down_module in self.downs.items():
-            out_dict['prediction_' + str(scale).replace('-', '.')] = down_module(x)
+        for scale in self.scales:
+            down = getattr(self, f'scale_{str(scale).replace(".", "-")}')
+            out_dict['prediction_' + str(scale).replace('-', '.')] = down(x)
         return out_dict
 
 
@@ -73,50 +43,56 @@ class Transform:
     Random tps transformation for equivariance constraints. See Sec 3.3
     """
     def __init__(self, bs, **kwargs):
-        noise = torch.normal(mean=0, std=kwargs['sigma_affine'] * torch.ones([bs, 2, 3]))
-        self.theta = noise + torch.eye(2, 3).view(1, 2, 3)
+        noise = tf.random.normal(shape=[bs, 2, 3], mean=0, stddev=kwargs['sigma_affine'] * tf.ones([bs, 2, 3]))
+        self.theta = noise + tf.reshape(tf.eye(2, 3), [1, 2, 3])
         self.bs = bs
 
         if ('sigma_tps' in kwargs) and ('points_tps' in kwargs):
             self.tps = True
-            self.control_points = make_coordinate_grid((kwargs['points_tps'], kwargs['points_tps']), type=noise.type())
-            self.control_points = self.control_points.unsqueeze(0)
-            self.control_params = torch.normal(mean=0,
-                                               std=kwargs['sigma_tps'] * torch.ones([bs, 1, kwargs['points_tps'] ** 2]))
+            self.control_points = make_coordinate_grid((kwargs['points_tps'], kwargs['points_tps']), type=noise.dtype)
+            self.control_points = tf.expand_dims(self.control_points, 0)
+            self.control_params = tf.random.normal(
+                shape=[bs, 1, kwargs['points_tps'] ** 2],
+                mean=0,
+                stddev=kwargs['sigma_tps'] * tf.ones([bs, 1, kwargs['points_tps'] ** 2])
+            )
         else:
             self.tps = False
 
     def transform_frame(self, frame):
-        grid = make_coordinate_grid(frame.shape[2:], type=frame.type()).unsqueeze(0)
-        grid = grid.view(1, frame.shape[2] * frame.shape[3], 2)
-        grid = self.warp_coordinates(grid).view(self.bs, frame.shape[2], frame.shape[3], 2)
-        return F.grid_sample(frame, grid, padding_mode="reflection")
+        grid = tf.expand_dims(make_coordinate_grid(frame.shape[1:3], type=frame.dtype), 0)
+        grid = tf.reshape(grid, (1, frame.shape[1] * frame.shape[2], 2))
+        grid = tf.reshape(self.warp_coordinates(grid), (self.bs, frame.shape[1], frame.shape[2], 2))
+        return bilinear_sampler(frame, grid[:, 0, :, :], grid[:, 1, :, :])
+        # return F.grid_sample(frame, grid, padding_mode="reflection")
 
-    def warp_coordinates(self, coordinates):
-        theta = self.theta.type(coordinates.type())
-        theta = theta.unsqueeze(1)
-        transformed = torch.matmul(theta[:, :, :, :2], coordinates.unsqueeze(-1)) + theta[:, :, :, 2:]
-        transformed = transformed.squeeze(-1)
+    def warp_coordinates(self, coordinates):  # 1, H*W, 2
+        theta = self.theta  # B, 2, 3
+        theta = tf.expand_dims(theta, 1)  # B, 1, 2, 3
+        transformed = torch.matmul(theta[:, :, :, :2], tf.expand_dims(coordinates, -1)) + theta[:, :, :, 2:]
+        transformed = tf.squeeze(transformed, -1)
 
         if self.tps:
-            control_points = self.control_points.type(coordinates.type())
-            control_params = self.control_params.type(coordinates.type())
-            distances = coordinates.view(coordinates.shape[0], -1, 1, 2) - control_points.view(1, 1, -1, 2)
-            distances = torch.abs(distances).sum(-1)
+            control_points = self.control_points
+            control_params = self.control_params
+            distances = tf.reshape(coordinates, (coordinates.shape[0], -1, 1, 2)) - tf.reshape(control_points, (1, 1, -1, 2))
+            distances = tf.reduce_sum(tf.abs(distances), -1)
 
             result = distances ** 2
-            result = result * torch.log(distances + 1e-6)
+            result = result * tf.math.log(distances + 1e-6)
             result = result * control_params
-            result = result.sum(dim=2).view(self.bs, coordinates.shape[1], 1)
+            result = tf.reshape(tf.reduce_sum(result, axis=2), (self.bs, coordinates.shape[1], 1))
             transformed = transformed + result
 
         return transformed
 
     def jacobian(self, coordinates):
         new_coordinates = self.warp_coordinates(coordinates)
-        grad_x = grad(new_coordinates[..., 0].sum(), coordinates, create_graph=True)
-        grad_y = grad(new_coordinates[..., 1].sum(), coordinates, create_graph=True)
-        jacobian = torch.cat([grad_x[0].unsqueeze(-2), grad_y[0].unsqueeze(-2)], dim=-2)
+        # grad_x = grad(new_coordinates[..., 0].sum(), coordinates, create_graph=True)
+        grad_x = tf.gradients(tf.reduce_sum(new_coordinates[..., 0]), coordinates)  # B, 10, 2
+        # grad_y = grad(new_coordinates[..., 1].sum(), coordinates, create_graph=True)
+        grad_y = tf.gradients(tf.reduce_sum(new_coordinates[..., 1]), coordinates)  # B, 10, 2
+        jacobian = tf.concat([tf.expand_dims(grad_x[0], -2), tf.expand_dims(grad_y[0], -2)], axis=-2)  # B, 10, 2, 2
         return jacobian
 
 
@@ -137,7 +113,7 @@ class GeneratorFullModel(torch.nn.Module):
         self.train_params = train_params
         self.scales = train_params['scales']
         self.disc_scales = self.discriminator.scales
-        self.pyramid = ImagePyramide(self.scales, generator.num_channels)
+        self.pyramid = ImagePyramid(self.scales, generator.num_channels)
         if torch.cuda.is_available():
             self.pyramid = self.pyramid.cuda()
 
@@ -234,7 +210,7 @@ class DiscriminatorFullModel(torch.nn.Module):
         self.discriminator = discriminator
         self.train_params = train_params
         self.scales = self.discriminator.scales
-        self.pyramid = ImagePyramide(self.scales, generator.num_channels)
+        self.pyramid = ImagePyramid(self.scales, generator.num_channels)
         if torch.cuda.is_available():
             self.pyramid = self.pyramid.cuda()
 
