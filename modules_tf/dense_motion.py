@@ -66,8 +66,8 @@ class DenseMotionNetwork(layers.Layer):
         jacobian = tf.matmul(kp_source_jacobian, tf.linalg.inv(kp_driving_jacobian))
         jacobian = tf.expand_dims(tf.expand_dims(jacobian, 1), 1)  # B, 1, 1, 10, 2, 2
         jacobian = tf.tile(jacobian, [1, h, w, 1, 1, 1])  # B, 64, 64, 10, 2, 2
-        coordinate_grid = tf.matmul(jacobian, tf.expand_dims(coordinate_grid, -2))  # B, 64, 64, 10, 1, 2
-        coordinate_grid = tf.squeeze(coordinate_grid, axis=-2)  # B, 64, 64, 10, 2
+        coordinate_grid = tf.matmul(jacobian, tf.expand_dims(coordinate_grid, -1))  # B, 64, 64, 10, 2, 1
+        coordinate_grid = tf.squeeze(coordinate_grid, axis=-1)  # B, 64, 64, 10, 2
 
         driving_to_source = coordinate_grid + tf.reshape(kp_source_value, [bs, 1, 1, self.num_kp, 2])  # B,64,64,10,2
 
@@ -104,7 +104,7 @@ class DenseMotionNetwork(layers.Layer):
         if self.scale_factor != 1:
             source_image = self.down(source_image)
 
-        bs, _, h, w = source_image.shape
+        bs, h, w, _ = source_image.shape
 
         out_dict = dict()
         heatmap_representation = self.create_heatmap_representations(

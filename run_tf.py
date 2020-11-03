@@ -154,6 +154,9 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
     LOG.info(f'Initialized at {manager.checkpoint.step_var.numpy()} step.')
     if manager.checkpoint.step_var.numpy() != 0:
         LOG.info(f'Initialized at {manager.checkpoint.step_var.numpy()} step.')
+    generator((np.zeros([1, 256, 256, 3], dtype=np.float32), np.zeros([1, 10, 2], dtype=np.float32),
+               np.random.randn(1, 10, 2, 2).astype(np.float32), np.zeros([1, 10, 2], dtype=np.float32),
+               np.random.randn(1, 10, 2, 2).astype(np.float32)))
     __import__('ipdb').set_trace()
 
     input_fn = dataset.get_input_fn(train_params['batch_size'])

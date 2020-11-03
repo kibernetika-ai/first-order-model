@@ -19,9 +19,11 @@ class OcclusionAwareGenerator(tf.keras.Model):
         super(OcclusionAwareGenerator, self).__init__()
 
         if dense_motion_params is not None:
-            self.dense_motion_network = DenseMotionNetwork(num_kp=num_kp, num_channels=num_channels,
-                                                           estimate_occlusion_map=estimate_occlusion_map,
-                                                           **dense_motion_params)
+            self.dense_motion_network = DenseMotionNetwork(
+                num_kp=num_kp, num_channels=num_channels,
+                estimate_occlusion_map=estimate_occlusion_map,
+                **dense_motion_params
+            )
         else:
             self.dense_motion_network = None
 
@@ -62,14 +64,14 @@ class OcclusionAwareGenerator(tf.keras.Model):
         if h_old != h or w_old != w:
             # deformation = deformation.permute(0, 3, 1, 2)
             deformation = resize_bilinear(deformation, size=(h, w))
-            deformation = deformation.permute(0, 3, 1, 2)
+        deformation = tf.transpose(deformation, [0, 3, 1, 2])
         return bilinear_sampler(inp, deformation[:, 0, :, :], deformation[:, 1, :, :])
 
     def call(self, inputs, training=None, mask=None):
         source_image, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian = inputs
         # Encoding (downsampling) part
         out = self.first(source_image)
-        for i in range(len(self.num_down_blocks)):
+        for i in range(self.num_down_blocks):
             down_block = getattr(self, f'down_block{i}')
             out = down_block(out)
 
@@ -89,18 +91,15 @@ class OcclusionAwareGenerator(tf.keras.Model):
         # deformation [B, 64, 64, 2]
         out = self.deform_input(out, deformation)  # B, 64, 64, 256
 
-        # if out.shape[1] != occlusion_map.shape[1] or out.shape[2] != occlusion_map.shape[2]:
-        print(occlusion_map.shape)
-        print(out.shape)
-        occlusion_map = resize_bilinear(occlusion_map, (out.shape[1:3]))
-        # occlusion_map = F.interpolate(occlusion_map, size=out.shape[2:], mode='bilinear')
+        if out.shape[1] != occlusion_map.shape[1] or out.shape[2] != occlusion_map.shape[2]:
+            occlusion_map = resize_bilinear(occlusion_map, (out.shape[1:3]))
         out = out * occlusion_map
 
         output_dict["deformed"] = self.deform_input(source_image, deformation)
 
         # Decoding part
         out = self.bottleneck(out)  # B, 64, 64, 256
-        for i in range(len(self.num_up_blocks)):
+        for i in range(self.num_up_blocks):
             up_block = getattr(self, f'up_block{i}')
             out = up_block(out)
         # B, 256, 256, 64

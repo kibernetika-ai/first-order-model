@@ -91,34 +91,6 @@ class UpBlock2d(layers.Layer):
         return out
 
 
-def build_model(block_expansion=64,
-                max_features=512, num_down_blocks=2, num_bottleneck_blocks=6, num_channels=3):
-    n4_out = layers.Input((64, 64, 256))
-    inputs = n4_out
-
-    bottleneck = tf.keras.Sequential()
-    in_features = min(max_features, block_expansion * (2 ** num_down_blocks))
-    for i in range(num_bottleneck_blocks):
-        bottleneck.add(ResBlock2d(in_features, kernel_size=(3, 3), padding=(1, 1)))
-    up_blocks = []
-    for i in range(num_down_blocks):
-        # in_features = min(max_features, block_expansion * (2 ** (num_down_blocks - i)))
-        out_features = min(max_features, block_expansion * (2 ** (num_down_blocks - i - 1)))
-        up_blocks.append(UpBlock2d(out_features, kernel_size=(3, 3)))
-    up_blocks = tf.keras.Sequential(layers=up_blocks)
-
-    final = layers.Conv2D(num_channels, kernel_size=(7, 7), padding='same')
-
-    out = bottleneck(inputs)
-    out = up_blocks(out)
-    out = final(out)
-    out = tf.keras.activations.sigmoid(out)
-
-    # outputs = tf.clip_by_value(outputs, 0.0, 1.0)
-    model = tf.keras.Model(inputs=[inputs], outputs=[out])
-    return model
-
-
 class DownBlock2d(layers.Layer):
     """
     Downsampling block for use in encoder.
