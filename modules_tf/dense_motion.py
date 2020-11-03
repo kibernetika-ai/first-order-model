@@ -1,8 +1,7 @@
 from stn import transformer
 import tensorflow as tf
 from tensorflow.keras import layers
-import torch.nn.functional as F
-import torch
+
 from modules_tf.util import Hourglass, AntiAliasInterpolation2d, make_coordinate_grid, kp2gaussian
 
 
@@ -135,7 +134,7 @@ class DenseMotionNetwork(tf.keras.Model):
 
         # Sec. 3.2 in the paper
         if self.occlusion:
-            occlusion_map = torch.sigmoid(self.occlusion(prediction))  # B, 64, 64, 1
+            occlusion_map = tf.keras.activations.sigmoid(self.occlusion(prediction))  # B, 64, 64, 1
             out_dict['occlusion_map'] = occlusion_map
 
         return out_dict
@@ -175,27 +174,7 @@ class DenseMotionNetwork(tf.keras.Model):
 
         # Sec. 3.2 in the paper
         if self.occlusion:
-            occlusion_map = torch.sigmoid(self.occlusion(prediction))
+            occlusion_map = tf.keras.activations.sigmoid(self.occlusion(prediction))  # B, 64, 64, 1
             out_dict['occlusion_map'] = occlusion_map
 
         return out_dict
-
-    def forward_g2(self, source_image, kp_driving, kp_source):
-        bs, _, h, w = source_image.shape
-        heatmap_representation = self.create_heatmap_representations(source_image, kp_driving, kp_source)
-        sparse_motion = self.create_sparse_motions(source_image, kp_driving, kp_source)
-        deformed_source = self.create_deformed_source_image(source_image, sparse_motion)
-        input = torch.cat([heatmap_representation, deformed_source], dim=2)
-        input = input.view(bs, -1, h, w)
-        return input, sparse_motion
-
-    def forward_g3(self, input, sparse_motion):
-        prediction = self.hourglass(input)
-        mask = self.mask(prediction)
-        mask = F.softmax(mask, dim=1)
-        mask = mask.unsqueeze(2)
-        sparse_motion = sparse_motion.permute(0, 1, 4, 2, 3)
-        deformation = (sparse_motion * mask).sum(dim=1)
-        deformation = deformation.permute(0, 2, 3, 1)
-        occlusion_map = torch.sigmoid(self.occlusion(prediction))
-        return deformation, occlusion_map
