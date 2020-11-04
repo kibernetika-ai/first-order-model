@@ -42,9 +42,7 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
     dataloader = DataLoader(
         dataset,
         batch_size=train_params['batch_size'],
-        shuffle=True,
-        drop_last=True,
-        num_workers=4
+        drop_last=True
     )
     print_fun(f'Full dataset length (with repeats): {len(dataset)}')
 
