@@ -15,7 +15,7 @@ from modules.discriminator import MultiScaleDiscriminator
 from modules.keypoint_detector import KPDetector
 
 import torch
-
+import logging
 import train
 from reconstruction import reconstruction
 from animate import animate
@@ -40,6 +40,13 @@ if __name__ == "__main__":
     parser.set_defaults(verbose=False)
 
     opt = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 

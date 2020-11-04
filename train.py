@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from logger import Logger
 from modules.model import GeneratorFullModel, DiscriminatorFullModel
 from sync_batchnorm import DataParallelWithCallback
-
+import logging
 
 def print_fun(s):
     print(s)
@@ -44,7 +44,6 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
         batch_size=train_params['batch_size'],
         drop_last=True
     )
-    print_fun(f'Full dataset length (with repeats): {len(dataset)}')
 
     generator_full = GeneratorFullModel(kp_detector, generator, discriminator, train_params)
     discriminator_full = DiscriminatorFullModel(kp_detector, generator, discriminator, train_params)
@@ -88,7 +87,7 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
 
                 step = i + int(epoch * len(dataset) / dataloader.batch_size)
                 if step % 20 == 0:
-                    print_fun(f'Epoch {epoch + 1}, global step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}')
+                    logging.info(f'Epoch {epoch + 1}, global step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}')
 
                 if step != 0 and step % 50 == 0:
                     for k, loss in losses.items():
