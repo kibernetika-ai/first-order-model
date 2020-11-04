@@ -58,8 +58,6 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
         for epoch in trange(start_epoch, train_params['num_epochs'], disable=None):
             i = 0
             for x in dataloader:
-                logging.info(x['source'].shape)
-                logging.info(x['driving'].shape)
                 losses_generator, generated = generator_full(x)
 
                 loss_values = [val.mean() for val in losses_generator.values()]
