@@ -50,11 +50,11 @@ if __name__ == "__main__":
     with open(opt.config) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
-    if opt.checkpoint is not None:
-        log_dir = os.path.join(*os.path.split(opt.checkpoint)[:-1])
-    else:
-        log_dir = os.path.join(opt.log_dir, os.path.basename(opt.config).split('.')[0])
-        log_dir += ' ' + strftime("%d_%m_%y_%H.%M.%S", gmtime())
+    #if opt.checkpoint is not None:
+    #    log_dir = os.path.join(*os.path.split(opt.checkpoint)[:-1])
+    #else:
+    log_dir = os.path.join(opt.log_dir, os.path.basename(opt.config).split('.')[0])
+    log_dir += ' ' + strftime("%d_%m_%y_%H.%M.%S", gmtime())
 
     if opt.data_dir:
         config['dataset_params']['root_dir'] = opt.data_dir
