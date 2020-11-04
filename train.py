@@ -56,8 +56,7 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
     step = 0
     with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
         for epoch in trange(start_epoch, train_params['num_epochs'], disable=None):
-            i = 0
-            for x in dataloader:
+            for i,x in enumerate(dataloader):
                 losses_generator, generated = generator_full(x)
 
                 loss_values = [val.mean() for val in losses_generator.values()]
@@ -113,8 +112,6 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
                         dataformats='HWC'
                     )
                     writer.flush()
-
-                i += 1
                 step += 1
 
             scheduler_generator.step()

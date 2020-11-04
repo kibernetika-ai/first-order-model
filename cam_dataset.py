@@ -1,4 +1,4 @@
-from torch.utils.data import IterableDataset
+from torch.utils.data import Dataset
 import numpy as np
 import glob
 import random
@@ -6,26 +6,20 @@ import logging
 import cv2
 import os
 import time
-from skimage import io, img_as_float32
+from skimage import img_as_float32
 
 LOG = logging.getLogger(__name__)
 
 
-def norm_img(img, width):
-    img = cv2.resize(img, (width, width))
-    img = img[:, :, ::-1]
-    img = img.astype(np.float32) / 255
-    img = np.transpose(img, [2, 0, 1])
-    return img
 
-
-class CamDataset(IterableDataset):
+class CamDataset(Dataset):
     """Face Landmarks dataset."""
 
     def __init__(self, root_dir):
         self.root_dir = root_dir
         self.width = 256
         self.data = []
+        self.kf = 2
 
         def _close(f, frames_out, boxes_out, lands_out):
             lm = 1
@@ -58,6 +52,13 @@ class CamDataset(IterableDataset):
                 first = None
                 fps = npzfile['fps'][0]
                 for i, frame in enumerate(frames):
+                    box = boxes[i]
+                    x1 = max(0, box[0] - (box[2] - box[0]) / self.kf)
+                    x2 = min(1, box[2] + (box[2] - box[0]) / self.kf)
+                    y1 = max(0, box[1] - (box[3] - box[1]) / self.kf)
+                    y2 = min(1, box[3] + (box[3] - box[1]) / self.kf)
+                    if y1 >= y2 or x1 >= x2:
+                        continue
                     l = lands[i]
                     if first is None:
                         first = l
@@ -78,6 +79,46 @@ class CamDataset(IterableDataset):
                     _close(f, frames_out, boxes_out, lands_out)
 
         LOG.info("Samples: {}".format(len(self.data)))
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        kf = 2
+        f, best_land, frames, boxes, lands = self.data[idx]
+        f1 = best_land
+        f2 = random.randint(1, len(frames) - 1)
+        box = boxes[f2]
+        x1 = max(0, box[0] - (box[2] - box[0]) / kf)
+        x2 = min(1, box[2] + (box[2] - box[0]) / kf)
+        y1 = max(0, box[1] - (box[3] - box[1]) / kf)
+        y2 = min(1, box[3] + (box[3] - box[1]) / kf)
+        img_out = cv2.imread(os.path.join(f, f'{frames[f2]}.jpg'))
+        x1 = int(x1 * img_out.shape[1])
+        x2 = int(x2 * img_out.shape[1])
+        y1 = int(y1 * img_out.shape[0])
+        y2 = int(y2 * img_out.shape[0])
+        img_out = img_out[y1:y2, x1:x2, ::-1]
+        img_out = cv2.resize(img_out, (256, 256))
+        img_out = img_as_float32(img_out)
+        img_in = cv2.imread(os.path.join(f, f'{frames[f1]}.jpg'))
+        box = boxes[f1]
+        x1 = max(0, box[0] - (box[2] - box[0]) / kf)
+        x2 = min(1, box[2] + (box[2] - box[0]) / kf)
+        y1 = max(0, box[1] - (box[3] - box[1]) / kf)
+        y2 = min(1, box[3] + (box[3] - box[1]) / kf)
+        x1 = int(x1 * img_in.shape[1])
+        x2 = int(x2 * img_in.shape[1])
+        y1 = int(y1 * img_in.shape[0])
+        y2 = int(y2 * img_in.shape[0])
+        img_in = img_in[y1:y2, x1:x2, ::-1]
+        img_in = cv2.resize(img_in, (256, 256))
+        img_in = img_as_float32(img_in)
+        out = {
+            'driving': img_out.transpose((2, 0, 1)),
+            'source': img_in.transpose((2, 0, 1)),
+        }
+        return out
 
     def __iter__(self):
         random.seed(time.time())
