@@ -56,7 +56,7 @@ class CamDataset(IterableDataset):
                 frames_out = []
                 boxes_out = []
                 first = None
-                # fps = npzfile['fps'][0]
+                fps = npzfile['fps'][0]
                 for i, frame in enumerate(frames):
                     l = lands[i]
                     if first is None:
@@ -64,7 +64,7 @@ class CamDataset(IterableDataset):
                     else:
                         d = np.abs(first[0:16] - l[0:16])
                         d = np.sum(d)
-                        if d > 2.5:
+                        if d > 2.5 or len(frames_out) > fps*4:
                             if len(frames_out) > 2:
                                 _close(f, frames_out, boxes_out, lands_out)
                             lands_out = []
