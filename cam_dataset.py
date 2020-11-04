@@ -119,7 +119,7 @@ class CamDataset(IterableDataset):
             y2 = int(y2 * img_in.shape[0])
             if y1 >= y2 or x1 >= x2:
                 continue
-            img_in = img_in[y1:y2, x1:x2, :]
+            img_in = img_in[y1:y2, x1:x2, ::-1]
             img_in = cv2.resize(img_in, (256, 256))
             img_in = img_as_float32(img_in)
             out = {
