@@ -11,7 +11,6 @@ from torch.utils.data import DataLoader
 from logger import Logger
 from modules.model import GeneratorFullModel, DiscriminatorFullModel
 from sync_batchnorm import DataParallelWithCallback
-from frames_dataset import DatasetRepeater
 
 
 def print_fun(s):
@@ -40,8 +39,6 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
     scheduler_kp_detector = MultiStepLR(optimizer_kp_detector, train_params['epoch_milestones'], gamma=0.1,
                                         last_epoch=-1 + start_epoch * (train_params['lr_kp_detector'] != 0))
 
-    if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
-        dataset = DatasetRepeater(dataset, train_params['num_repeats'])
     dataloader = DataLoader(
         dataset,
         batch_size=train_params['batch_size'],
@@ -62,7 +59,8 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
 
     with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
         for epoch in trange(start_epoch, train_params['num_epochs'], disable=None):
-            for i, x in enumerate(dataloader):
+            i = 0
+            for x in dataloader:
                 losses_generator, generated = generator_full(x)
 
                 loss_values = [val.mean() for val in losses_generator.values()]
@@ -119,6 +117,8 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
                         dataformats='HWC'
                     )
                     writer.flush()
+
+                    i += 1
 
             scheduler_generator.step()
             scheduler_discriminator.step()

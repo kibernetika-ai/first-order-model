@@ -8,7 +8,7 @@ from argparse import ArgumentParser
 from time import gmtime, strftime
 from shutil import copy
 
-from frames_dataset import FramesDataset
+from cam_dataset import CamDataset
 
 from modules.generator import OcclusionAwareGenerator
 from modules.discriminator import MultiScaleDiscriminator
@@ -95,8 +95,7 @@ if __name__ == "__main__":
     if opt.verbose:
         print(kp_detector)
 
-    dataset = FramesDataset(is_train=(opt.mode == 'train'), **config['dataset_params'])
-    train.print_fun(f'Dataset length: {len(dataset)}')
+    dataset = CamDataset(config['dataset_params']['root_dir'])
 
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
