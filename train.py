@@ -53,7 +53,7 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
         discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
 
     writer = tensorboardX.SummaryWriter(log_dir, flush_secs=60)
-
+    step = 0
     with Logger(log_dir=log_dir, visualizer_params=config['visualizer_params'], checkpoint_freq=train_params['checkpoint_freq']) as logger:
         for epoch in trange(start_epoch, train_params['num_epochs'], disable=None):
             i = 0
@@ -87,7 +87,6 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
                 losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
                 logger.log_iter(losses=losses)
 
-                step = i
                 if step % 20 == 0:
                     logging.info(f'Epoch {epoch + 1}, step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}')
 
@@ -118,6 +117,7 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
                     writer.flush()
 
                     i += 1
+                    step += 1
 
             scheduler_generator.step()
             scheduler_discriminator.step()
