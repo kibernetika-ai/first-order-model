@@ -116,8 +116,8 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
                     )
                     writer.flush()
 
-                    i += 1
-                    step += 1
+                i += 1
+                step += 1
 
             scheduler_generator.step()
             scheduler_discriminator.step()
