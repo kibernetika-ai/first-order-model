@@ -125,6 +125,5 @@ class CamDataset(IterableDataset):
             out = {
                 'driving': img_out.transpose((2, 0, 1)),
                 'source': img_in.transpose((2, 0, 1)),
-                'name': f,
             }
             yield out
