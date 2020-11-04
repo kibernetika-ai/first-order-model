@@ -87,9 +87,9 @@ def train(config, generator, discriminator, kp_detector, checkpoint, log_dir, da
                 losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
                 logger.log_iter(losses=losses)
 
-                step = i + int(epoch * len(dataset) / dataloader.batch_size)
+                step = i
                 if step % 20 == 0:
-                    logging.info(f'Epoch {epoch + 1}, global step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}')
+                    logging.info(f'Epoch {epoch + 1}, step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}')
 
                 if step != 0 and step % 50 == 0:
                     for k, loss in losses.items():
