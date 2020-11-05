@@ -75,7 +75,7 @@ class FramesDataset(Dataset):
     """
 
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
-                 random_seed=0, pairs_list=None, augmentation_params=None):
+                 random_seed=0, pairs_list=None, augmentation_params=None, repeats=1):
         data_dir = os.environ.get("DATA_DIR")
         if data_dir is not None:
             root_dir = data_dir
@@ -85,6 +85,7 @@ class FramesDataset(Dataset):
         self.root_dir = os.path.join(root_dir)
         self.videos = os.listdir(root_dir)
         self.frame_shape = tuple(frame_shape)
+        self.repeats = repeats
         if pairs_list:
             self.pairs_list = os.path.join(self.root_dir, pairs_list)
         else:
@@ -196,7 +197,7 @@ class FramesDataset(Dataset):
             (tf.float32, tf.float32),
             (tf.TensorShape([None, None, 3]), tf.TensorShape([None, None, 3]))
         )
-        return dataset.padded_batch(batch_size, drop_remainder=True).prefetch(batch_size * 2)
+        return dataset.repeat(self.repeats).padded_batch(batch_size, drop_remainder=True).prefetch(batch_size * 2)
 
 
 class DatasetRepeater(Dataset):

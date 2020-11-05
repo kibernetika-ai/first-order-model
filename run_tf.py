@@ -8,12 +8,14 @@ import yaml
 import cv2
 import numpy as np
 import tensorflow as tf
+import tensorboardX
+from tqdm import trange
 
-from modules_tf.frames_dataset import FramesDataset
-
-from modules_tf.generator import OcclusionAwareGenerator
 from modules_tf.discriminator import MultiScaleDiscriminator
+from modules_tf.frames_dataset import FramesDataset
+from modules_tf.generator import OcclusionAwareGenerator
 from modules_tf.keypoint_detector import KPDetector
+from modules_tf import model
 
 from reconstruction import reconstruction
 from animate import animate
@@ -32,7 +34,7 @@ def parse_args():
     parser.add_argument("--enable-jacobian", action='store_true')
     parser.add_argument("--disable-jacobian", action='store_true')
     parser.add_argument("--epochs", type=int, default=0)
-    parser.add_argument("--repeats", type=int, default=0)
+    parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--num-kp", type=int, default=0)
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
     parser.add_argument("--verbose", dest="verbose", action="store_true", help="Print model architecture")
@@ -118,8 +120,12 @@ def main():
 
     dataset = FramesDataset(
         is_train=(opt.mode == 'train'),
-        **config['dataset_params']
+        repeats=opt.repeats,
+        **config['dataset_params'],
     )
+    if len(dataset) < 10 and opt.repeats < 10:
+        dataset.repeats = 100 // len(dataset)
+
     LOG.info(f'Dataset length: {len(dataset)}')
 
     if not os.path.exists(log_dir):
@@ -154,10 +160,6 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
     LOG.info(f'Initialized at {manager.checkpoint.step_var.numpy()} step.')
     if manager.checkpoint.step_var.numpy() != 0:
         LOG.info(f'Initialized at {manager.checkpoint.step_var.numpy()} step.')
-    generator((np.zeros([1, 256, 256, 3], dtype=np.float32), np.zeros([1, 10, 2], dtype=np.float32),
-               np.random.randn(1, 10, 2, 2).astype(np.float32), np.zeros([1, 10, 2], dtype=np.float32),
-               np.random.randn(1, 10, 2, 2).astype(np.float32)))
-    __import__('ipdb').set_trace()
 
     input_fn = dataset.get_input_fn(train_params['batch_size'])
     optimizer_generator = tf.keras.optimizers.Adam(
@@ -170,12 +172,6 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
         learning_rate=train_params['lr_kp_detector'], beta_1=0.5, beta_2=0.999
     )
     start_epoch = 0
-    # if checkpoint is not None:
-    #     start_epoch = Logger.load_cpk(checkpoint, generator, discriminator, kp_detector,
-    #                                   optimizer_generator, optimizer_discriminator,
-    #                                   None if train_params['lr_kp_detector'] == 0 else optimizer_kp_detector)
-    # else:
-    #     start_epoch = 0
 
     tf.keras.optimizers.schedules.LearningRateSchedule()
     # scheduler_generator = MultiStepLR(optimizer_generator, train_params['epoch_milestones'], gamma=0.1,
@@ -185,87 +181,87 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
     # scheduler_kp_detector = MultiStepLR(optimizer_kp_detector, train_params['epoch_milestones'], gamma=0.1,
     #                                     last_epoch=-1 + start_epoch * (train_params['lr_kp_detector'] != 0))
 
-    # if 'num_repeats' in train_params or train_params['num_repeats'] != 1:
-    #     dataset = DatasetRepeater(dataset, train_params['num_repeats'])
-    # LOG.info(f'Full dataset length (with repeats): {len(dataset)}')
-
-    generator_full = GeneratorFullModel(kp_detector, generator, discriminator, train_params)
-    discriminator_full = DiscriminatorFullModel(kp_detector, generator, discriminator, train_params)
-
-    # if torch.cuda.is_available():
-    #     generator_full = DataParallelWithCallback(generator_full, device_ids=device_ids)
-    #     discriminator_full = DataParallelWithCallback(discriminator_full, device_ids=device_ids)
+    generator_full = model.GeneratorFullModel(kp_detector, generator, discriminator, train_params)
+    discriminator_full = model.DiscriminatorFullModel(kp_detector, generator, discriminator, train_params)
 
     writer = tensorboardX.SummaryWriter(log_dir, flush_secs=60)
 
     for epoch in trange(start_epoch, train_params['num_epochs'], disable=None):
-        for i, x in enumerate(dataloader):
-            losses_generator, generated = generator_full(x)
+        for i, (x_source, x_driving) in enumerate(input_fn):
+            # __import__('ipdb').set_trace()
+            with tf.GradientTape(persistent=True) as tape:
+                losses_generator, generated = generator_full((x_source, x_driving), training=True)
 
-            loss_values = [val.mean() for val in losses_generator.values()]
-            loss = sum(loss_values)
+                loss_values = [tf.reduce_mean(val) for val in losses_generator.values()]
+                loss = tf.reduce_sum(loss_values)
 
-            loss.backward()
-            optimizer_generator.step()
-            optimizer_generator.zero_grad()
-            optimizer_kp_detector.step()
-            optimizer_kp_detector.zero_grad()
-
-            if train_params['loss_weights']['generator_gan'] != 0:
-                optimizer_discriminator.zero_grad()
-                losses_discriminator = discriminator_full(x, generated)
-                loss_values = [val.mean() for val in losses_discriminator.values()]
-                loss = sum(loss_values)
-
-                loss.backward()
-                optimizer_discriminator.step()
-                optimizer_discriminator.zero_grad()
-            else:
-                losses_discriminator = {}
-
-            losses_generator.update(losses_discriminator)
-            losses = {key: value.mean().detach().data.cpu().numpy() for key, value in losses_generator.items()}
-            logger.log_iter(losses=losses)
-
-            step = i + int(epoch * len(dataset) / dataloader.batch_size)
-            if step % 20 == 0:
-                LOG.info(
-                    f'Epoch {epoch + 1}, global step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}'
+                generator_gradients = tape.gradient(loss, generator.trainable_variables)
+                kp_detector_gradients = tape.gradient(loss, kp_detector.trainable_variables)
+                optimizer_generator.apply_gradients(
+                    zip(generator_gradients, generator.trainable_variables)
+                )
+                optimizer_kp_detector.apply_gradients(
+                    zip(kp_detector_gradients, kp_detector.trainable_variables)
                 )
 
-            if step != 0 and step % 50 == 0:
-                for k, loss in losses.items():
-                    writer.add_scalar(k, float(loss), global_step=step)
-                # add images
-                source = x['source'][0].detach().cpu().numpy().transpose([1, 2, 0])
-                driving = x['driving'][0].detach().cpu().numpy().transpose([1, 2, 0])
-                kp_source = generated['kp_source']['value'][0].detach().cpu().numpy()
-                kp_driving = generated['kp_driving']['value'][0].detach().cpu().numpy()
-                pred = generated['prediction'][0].detach().cpu().numpy().transpose([1, 2, 0])
-                kp_source = kp_source * 127.5 + 127.5
-                kp_driving = kp_driving * 127.5 + 127.5
-                source = cv2.UMat((source * 255.).clip(0, 255).astype(np.uint8)).get()
-                driving = cv2.UMat((driving * 255.).clip(0, 255).astype(np.uint8)).get()
-                pred = (pred * 255.).clip(0, 255).astype(np.uint8)
-                for x1, y1 in kp_source:
-                    cv2.circle(source, (int(x1), int(y1)), 2, (250, 250, 250), thickness=cv2.FILLED)
-                for x1, y1 in kp_driving:
-                    cv2.circle(driving, (int(x1), int(y1)), 2, (250, 250, 250), thickness=cv2.FILLED)
+                if train_params['loss_weights']['generator_gan'] != 0:
+                    losses_discriminator = discriminator_full(
+                        (x_driving, generated['kp_driving_value'], generated['prediction'])
+                    )
+                    loss_values = tf.stack(tf.reduce_mean(val) for val in losses_discriminator.values())
+                    disc_loss = tf.reduce_sum(loss_values)
 
-                writer.add_image(
-                    'SourceDrivingPred', np.hstack((source, driving, pred)),
-                    global_step=step,
-                    dataformats='HWC'
-                )
-                writer.flush()
+                    disc_gradients = tape.gradient(disc_loss, discriminator.trainable_variables)
+                    optimizer_discriminator.apply_gradients(
+                        zip(disc_gradients, discriminator.trainable_variables)
+                    )
 
-        scheduler_generator.step()
-        scheduler_discriminator.step()
-        scheduler_kp_detector.step()
+                else:
+                    losses_discriminator = {}
 
-        step_var += 1
-        if step_var.numpy() % 100 == 0:
-            manager.save()
+                losses_generator.update(losses_discriminator)
+                losses = {key: tf.reduce_mean(value).numpy() for key, value in losses_generator.items()}
+                # logger.log_iter(losses=losses)
+
+                step = i + int(epoch * len(dataset) / train_params['batch_size'])
+                if step % 20 == 0:
+                    LOG.info(
+                        f'Epoch {epoch + 1}, global step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}'
+                    )
+
+                if step != 0 and step % 50 == 0:
+                    for k, loss in losses.items():
+                        writer.add_scalar(k, float(loss), global_step=step)
+                    # add images
+                    source = x_source[0].numpy()
+                    driving = x_driving[0].numpy()
+                    kp_source = generated['kp_source_value'][0].numpy()
+                    kp_driving = generated['kp_driving_value'][0].numpy()
+                    pred = generated['prediction'][0].numpy()
+                    kp_source = kp_source * 127.5 + 127.5
+                    kp_driving = kp_driving * 127.5 + 127.5
+                    source = cv2.UMat((source * 255.).clip(0, 255).astype(np.uint8)).get()
+                    driving = cv2.UMat((driving * 255.).clip(0, 255).astype(np.uint8)).get()
+                    pred = (pred * 255.).clip(0, 255).astype(np.uint8)
+                    for x1, y1 in kp_source:
+                        cv2.circle(source, (int(x1), int(y1)), 2, (250, 250, 250), thickness=cv2.FILLED)
+                    for x1, y1 in kp_driving:
+                        cv2.circle(driving, (int(x1), int(y1)), 2, (250, 250, 250), thickness=cv2.FILLED)
+
+                    writer.add_image(
+                        'SourceDrivingPred', np.hstack((source, driving, pred)),
+                        global_step=step,
+                        dataformats='HWC'
+                    )
+                    writer.flush()
+
+            scheduler_generator.step()
+            scheduler_discriminator.step()
+            scheduler_kp_detector.step()
+
+            step_var += 1
+            if step_var.numpy() % 100 == 0:
+                manager.save()
 
 
 if __name__ == '__main__':

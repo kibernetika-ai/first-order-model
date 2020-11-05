@@ -91,8 +91,8 @@ class MultiScaleDiscriminator(tf.keras.Model):
         out_dict = {}
         for scale in self.scales:
             disc = getattr(self, f'scale_{str(scale).replace(".", "-")}')
-            key = 'prediction_' + scale
-            feature_maps, prediction_map = disc(x[key], kp_value)
-            out_dict['feature_maps_' + scale] = feature_maps
-            out_dict['prediction_map_' + scale] = prediction_map
+            key = f'prediction_{scale}'
+            feature_maps, prediction_map = disc((x[key], kp_value))
+            out_dict[f'feature_maps_{scale}'] = feature_maps
+            out_dict[f'prediction_map_{scale}'] = prediction_map
         return out_dict

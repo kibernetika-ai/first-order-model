@@ -1,16 +1,13 @@
 from stn.transformer import bilinear_sampler
 import tensorflow as tf
 from tensorflow.keras import layers
-import torch
 from modules_tf.util import AntiAliasInterpolation2d, make_coordinate_grid
-import numpy as np
-from torch.autograd import grad
 
 
 vgg19_feat_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
 
 
-def VGG19(input_tensor=None, input_shape=(256, 256, 3)):
+def vgg_19(input_tensor=None, input_shape=(256, 256, 3)):
     vgg19 = tf.keras.applications.VGG19(input_tensor=input_tensor, include_top=False, input_shape=input_shape)
     outputs = []
     for layer_name in vgg19_feat_layers:
@@ -69,7 +66,7 @@ class Transform:
     def warp_coordinates(self, coordinates):  # 1, H*W, 2
         theta = self.theta  # B, 2, 3
         theta = tf.expand_dims(theta, 1)  # B, 1, 2, 3
-        transformed = torch.matmul(theta[:, :, :, :2], tf.expand_dims(coordinates, -1)) + theta[:, :, :, 2:]
+        transformed = tf.matmul(theta[:, :, :, :2], tf.expand_dims(coordinates, -1)) + theta[:, :, :, 2:]
         transformed = tf.squeeze(transformed, -1)
 
         if self.tps:
@@ -100,7 +97,7 @@ def detach_kp(kp):
     return {key: value.detach() for key, value in kp.items()}
 
 
-class GeneratorFullModel(torch.nn.Module):
+class GeneratorFullModel(layers.Layer):
     """
     Merge all generator related updates into single model for better multi-gpu usage
     """
@@ -114,26 +111,25 @@ class GeneratorFullModel(torch.nn.Module):
         self.scales = train_params['scales']
         self.disc_scales = self.discriminator.scales
         self.pyramid = ImagePyramid(self.scales, generator.num_channels)
-        if torch.cuda.is_available():
-            self.pyramid = self.pyramid.cuda()
 
         self.loss_weights = train_params['loss_weights']
 
         if sum(self.loss_weights['perceptual']) != 0:
-            self.vgg = Vgg19()
-            if torch.cuda.is_available():
-                self.vgg = self.vgg.cuda()
+            self.vgg = vgg_19()
 
-    def forward(self, x):
-        kp_source = self.kp_extractor(x['source'])
-        kp_driving = self.kp_extractor(x['driving'])
+    def call(self, inputs, **kwargs):
+        x_source, x_driving = inputs
+        kp_source_value, kp_source_jacobian = self.kp_extractor(x_source)
+        kp_driving_value, kp_driving_jacobian = self.kp_extractor(x_driving)
 
-        generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
-        generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})
+        generated = self.generator(
+            (x_source, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian)
+        )
+        generated.update({'kp_source_value': kp_source_value, 'kp_driving_value': kp_driving_value})
 
         loss_values = {}
 
-        pyramide_real = self.pyramid(x['driving'])
+        pyramide_real = self.pyramid(x_driving)
         pyramide_generated = self.pyramid(generated['prediction'])
 
         if sum(self.loss_weights['perceptual']) != 0:
@@ -143,62 +139,65 @@ class GeneratorFullModel(torch.nn.Module):
                 y_vgg = self.vgg(pyramide_real['prediction_' + str(scale)])
 
                 for i, weight in enumerate(self.loss_weights['perceptual']):
-                    value = torch.abs(x_vgg[i] - y_vgg[i].detach()).mean()
+                    value = tf.reduce_mean(tf.abs(x_vgg[i] - tf.stop_gradient(y_vgg[i])))
                     value_total += self.loss_weights['perceptual'][i] * value
                 loss_values['perceptual'] = value_total
 
         if self.loss_weights['generator_gan'] != 0:
-            discriminator_maps_generated = self.discriminator(pyramide_generated, kp=detach_kp(kp_driving))
-            discriminator_maps_real = self.discriminator(pyramide_real, kp=detach_kp(kp_driving))
+            discriminator_maps_generated = self.discriminator((pyramide_generated, tf.stop_gradient(kp_driving_value)))
+            discriminator_maps_real = self.discriminator((pyramide_real, tf.stop_gradient(kp_driving_value)))
             value_total = 0
             for scale in self.disc_scales:
-                key = 'prediction_map_%s' % scale
-                value = ((1 - discriminator_maps_generated[key]) ** 2).mean()
+                key = f'prediction_map_{scale}'
+                value = tf.reduce_mean((1 - discriminator_maps_generated[key]) ** 2)
                 value_total += self.loss_weights['generator_gan'] * value
             loss_values['gen_gan'] = value_total
 
             if sum(self.loss_weights['feature_matching']) != 0:
                 value_total = 0
                 for scale in self.disc_scales:
-                    key = 'feature_maps_%s' % scale
+                    key = f'feature_maps_{scale}'
                     for i, (a, b) in enumerate(zip(discriminator_maps_real[key], discriminator_maps_generated[key])):
                         if self.loss_weights['feature_matching'][i] == 0:
                             continue
-                        value = torch.abs(a - b).mean()
+                        value = tf.reduce_mean(tf.abs(a - b))
                         value_total += self.loss_weights['feature_matching'][i] * value
                     loss_values['feature_matching'] = value_total
 
         if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) != 0:
-            transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
-            transformed_frame = transform.transform_frame(x['driving'])
-            transformed_kp = self.kp_extractor(transformed_frame)
+            transform = Transform(x_driving.shape[0], **self.train_params['transform_params'])
+            transformed_frame = transform.transform_frame(x_driving)
+            transformed_kp_value, transformed_kp_jacobian = self.kp_extractor(transformed_frame)
 
             generated['transformed_frame'] = transformed_frame
-            generated['transformed_kp'] = transformed_kp
+            generated['transformed_kp_value'] = transformed_kp_value
+            generated['transformed_kp_jacobian'] = transformed_kp_jacobian
 
-            ## Value loss part
+            # Value loss part
             if self.loss_weights['equivariance_value'] != 0:
-                value = torch.abs(kp_driving['value'] - transform.warp_coordinates(transformed_kp['value'])).mean()
+                value = tf.reduce_mean(tf.abs(kp_driving_value - transform.warp_coordinates(transformed_kp_value)))
                 loss_values['equivariance_value'] = self.loss_weights['equivariance_value'] * value
 
-            ## jacobian loss part
+            # jacobian loss part
             if self.loss_weights['equivariance_jacobian'] != 0:
-                jacobian_transformed = torch.matmul(transform.jacobian(transformed_kp['value']),
-                                                    transformed_kp['jacobian'])
+                jacobian_transformed = tf.matmul(
+                    transform.jacobian(transformed_kp_value),
+                    transformed_kp_jacobian
+                )
 
-                normed_driving = torch.inverse(kp_driving['jacobian'])
+                normed_driving = tf.linalg.inv(kp_driving_jacobian)
                 normed_transformed = jacobian_transformed
-                value = torch.matmul(normed_driving, normed_transformed)
+                value = tf.matmul(normed_driving, normed_transformed)
 
-                eye = torch.eye(2).view(1, 1, 2, 2).type(value.type())
+                eye = tf.reshape(tf.eye(2), [1, 1, 2, 2])
 
-                value = torch.abs(eye - value).mean()
+                value = tf.reduce_mean(tf.abs(eye - value))
                 loss_values['equivariance_jacobian'] = self.loss_weights['equivariance_jacobian'] * value
 
         return loss_values, generated
 
 
-class DiscriminatorFullModel(torch.nn.Module):
+class DiscriminatorFullModel(layers.Layer):
     """
     Merge all discriminator related updates into single model for better multi-gpu usage
     """
@@ -211,25 +210,23 @@ class DiscriminatorFullModel(torch.nn.Module):
         self.train_params = train_params
         self.scales = self.discriminator.scales
         self.pyramid = ImagePyramid(self.scales, generator.num_channels)
-        if torch.cuda.is_available():
-            self.pyramid = self.pyramid.cuda()
 
         self.loss_weights = train_params['loss_weights']
 
-    def forward(self, x, generated):
-        pyramide_real = self.pyramid(x['driving'])
-        pyramide_generated = self.pyramid(generated['prediction'].detach())
+    def call(self, inputs, **kwargs):
+        x_driving, kp_driving_value, generated_prediction = inputs
+        pyramide_real = self.pyramid(x_driving)
+        pyramide_generated = self.pyramid(tf.stop_gradient(generated_prediction))
 
-        kp_driving = generated['kp_driving']
-        discriminator_maps_generated = self.discriminator(pyramide_generated, kp=detach_kp(kp_driving))
-        discriminator_maps_real = self.discriminator(pyramide_real, kp=detach_kp(kp_driving))
+        discriminator_maps_generated = self.discriminator((pyramide_generated, tf.stop_gradient(kp_driving_value)))
+        discriminator_maps_real = self.discriminator((pyramide_real, tf.stop_gradient(kp_driving_value)))
 
         loss_values = {}
         value_total = 0
         for scale in self.scales:
-            key = 'prediction_map_%s' % scale
+            key = f'prediction_map_{scale}'
             value = (1 - discriminator_maps_real[key]) ** 2 + discriminator_maps_generated[key] ** 2
-            value_total += self.loss_weights['discriminator_gan'] * value.mean()
+            value_total += self.loss_weights['discriminator_gan'] * tf.reduce_mean(value)
         loss_values['disc_gan'] = value_total
 
         return loss_values
