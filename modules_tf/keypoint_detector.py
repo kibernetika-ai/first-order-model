@@ -1,3 +1,5 @@
+import numpy as np
+
 import tensorflow as tf
 from tensorflow.keras import layers
 from modules_tf.util import Hourglass, make_coordinate_grid, AntiAliasInterpolation2d
@@ -21,7 +23,9 @@ class KPDetector(tf.keras.Model):
         if estimate_jacobian:
             self.num_jacobian_maps = 1 if single_jacobian_map else num_kp
             self.jacobian = layers.Conv2D(
-                4 * self.num_jacobian_maps, kernel_size=(7, 7), padding='VALID', kernel_initializer='zeros'
+                4 * self.num_jacobian_maps, kernel_size=(7, 7), padding='VALID',
+                kernel_initializer='zeros',
+                bias_initializer=tf.keras.initializers.constant([1., 0., 0., 1.] * self.num_jacobian_maps),
             )
             # self.jacobian.weight.data.zero_()
             # self.jacobian.bias.data.copy_(torch.tensor([1, 0, 0, 1] * self.num_jacobian_maps, dtype=torch.float))

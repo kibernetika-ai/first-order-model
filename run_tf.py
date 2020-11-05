@@ -188,7 +188,6 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
 
     for epoch in trange(start_epoch, train_params['num_epochs'], disable=None):
         for i, (x_source, x_driving) in enumerate(input_fn):
-            # __import__('ipdb').set_trace()
             with tf.GradientTape(persistent=True) as tape:
                 losses_generator, generated = generator_full((x_source, x_driving), training=True)
 

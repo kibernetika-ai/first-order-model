@@ -93,10 +93,6 @@ class Transform:
         return jacobian
 
 
-def detach_kp(kp):
-    return {key: value.detach() for key, value in kp.items()}
-
-
 class GeneratorFullModel(layers.Layer):
     """
     Merge all generator related updates into single model for better multi-gpu usage
