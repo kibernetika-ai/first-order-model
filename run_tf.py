@@ -282,8 +282,8 @@ def export(generator, discriminator, kp_detector, log_dir, input_fn):
     generator(
         (x_source, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian)
     )
-    generator.save(log_dir, 'generator')
-    kp_detector.save(log_dir, 'kp_detector')
+    kp_detector.save(os.path.join(log_dir, 'kp_detector'))
+    generator.save(os.path.join(log_dir, 'generator'))
 
 
 if __name__ == '__main__':
