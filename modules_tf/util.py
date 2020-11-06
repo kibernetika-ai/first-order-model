@@ -14,11 +14,11 @@ def kp2gaussian(kp_value, spatial_size, kp_variance):
         coordinate_grid,
         [1, coordinate_grid.shape[0], coordinate_grid.shape[1], 1, 2]
     )  # 1, 64, 64, 1, 2
-    repeats = [mean.shape[0], 1, 1, mean.shape[1], 1]  # B, 1, 1, 10, 1
-    coordinate_grid = tf.tile(coordinate_grid, [*repeats])  # B, 64, 64, 10, 2
+    # repeats =   # B, 1, 1, 10, 1
+    coordinate_grid = tf.tile(coordinate_grid, [tf.shape(mean)[0], 1, 1, mean.shape[1], 1])  # B, 64, 64, 10, 2
 
     # Preprocess kp shape
-    mean = tf.reshape(mean, [mean.shape[0], 1, 1, mean.shape[1], mean.shape[2]])  # B, 1, 1, 10, 2
+    mean = tf.reshape(mean, [tf.shape(mean)[0], 1, 1, mean.shape[1], mean.shape[2]])  # B, 1, 1, 10, 2
 
     mean_sub = (coordinate_grid - mean)  # B, 64, 64, 10, 2
 
@@ -35,8 +35,8 @@ def make_coordinate_grid(spatial_size, type):
     x = tf.range(w, dtype=type)
     y = tf.range(h, dtype=type)
 
-    x = (2 * (x / (w - 1)) - 1)
-    y = (2 * (y / (h - 1)) - 1)
+    x = (2. * (x / (tf.cast(w, type) - 1.)) - 1.)
+    y = (2. * (y / (tf.cast(h, type) - 1.)) - 1.)
 
     yy = tf.repeat(tf.reshape(y, [-1, 1]), w, 1)
     xx = tf.repeat(tf.reshape(x, [1, -1]), h, 0)

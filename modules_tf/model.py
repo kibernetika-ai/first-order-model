@@ -123,15 +123,20 @@ class GeneratorFullModel(layers.Layer):
         kp_source_value, kp_source_jacobian = self.kp_extractor(x_source)
         kp_driving_value, kp_driving_jacobian = self.kp_extractor(x_driving)
 
-        generated = self.generator(
+        generated = {}
+        generated_prediction = self.generator(
             (x_source, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian)
         )
-        generated.update({'kp_source_value': kp_source_value, 'kp_driving_value': kp_driving_value})
+        generated.update({
+            'kp_source_value': kp_source_value,
+            'kp_driving_value': kp_driving_value,
+            'prediction': generated_prediction,
+        })
 
         loss_values = {}
 
         pyramide_real = self.pyramid(x_driving)
-        pyramide_generated = self.pyramid(generated['prediction'])
+        pyramide_generated = self.pyramid(generated_prediction)
 
         if sum(self.loss_weights['perceptual']) != 0:
             value_total = 0
@@ -172,9 +177,9 @@ class GeneratorFullModel(layers.Layer):
             transformed_frame = self.transform.transform_frame(x_driving)
             transformed_kp_value, transformed_kp_jacobian = self.kp_extractor(transformed_frame)
 
-            generated['transformed_frame'] = transformed_frame
-            generated['transformed_kp_value'] = transformed_kp_value
-            generated['transformed_kp_jacobian'] = transformed_kp_jacobian
+            # generated['transformed_frame'] = transformed_frame
+            # generated['transformed_kp_value'] = transformed_kp_value
+            # generated['transformed_kp_jacobian'] = transformed_kp_jacobian
 
             # Value loss part
             if self.loss_weights['equivariance_value'] != 0:

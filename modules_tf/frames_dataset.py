@@ -79,6 +79,11 @@ class FramesDataset(object):
 
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
                  random_seed=0, pairs_list=None, augmentation_params=None, repeats=1):
+        self.id_sampling = id_sampling
+        self.frame_shape = tuple(frame_shape)
+        self.repeats = repeats
+        self.is_train = is_train
+
         data_dir = os.environ.get("DATA_DIR")
         if data_dir is not None:
             root_dir = data_dir
@@ -92,13 +97,11 @@ class FramesDataset(object):
             if not self.id_sampling:
                 self.videos = glob.glob(os.path.join(root_dir, '*/*'))
 
-        self.frame_shape = tuple(frame_shape)
-        self.repeats = repeats
         if pairs_list:
             self.pairs_list = os.path.join(self.root_dir, pairs_list)
         else:
             pairs_list = None
-        self.id_sampling = id_sampling
+
         if os.path.exists(os.path.join(root_dir, 'train')):
             assert os.path.exists(os.path.join(root_dir, 'test'))
             LOG.info("Use predefined train-test split.")
@@ -127,8 +130,6 @@ class FramesDataset(object):
         else:
             LOG.info(f'Detected video dataset.')
             self.video_dataset = True
-
-        self.is_train = is_train
 
         if self.is_train:
             self.transform = AllAugmentationTransform(**augmentation_params)

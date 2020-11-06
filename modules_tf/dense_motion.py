@@ -41,7 +41,7 @@ class DenseMotionNetwork(layers.Layer):
         """
         Eq 6. in the paper H_k(z)
         """
-        spatial_size = source_image.shape[1:3]
+        spatial_size = tf.shape(source_image)[1:3]
         gaussian_driving = kp2gaussian(kp_driving_value, spatial_size=spatial_size, kp_variance=self.kp_variance)
         gaussian_source = kp2gaussian(kp_source_value, spatial_size=spatial_size, kp_variance=self.kp_variance)
         heatmap = gaussian_driving - gaussian_source
@@ -106,7 +106,7 @@ class DenseMotionNetwork(layers.Layer):
 
         bs, h, w, _ = source_image.shape
 
-        out_dict = dict()
+        # out_dict = dict()
         heatmap_representation = self.create_heatmap_representations(
             source_image, kp_driving_value, kp_source_value
         )  # B, 64, 64, 11, 1
@@ -116,7 +116,7 @@ class DenseMotionNetwork(layers.Layer):
             kp_source_value, kp_source_jacobian
         )  # B, 64, 64, 11, 2
         deformed_source = self.create_deformed_source_image(source_image, sparse_motion)  # B, 64, 64, 11, 3
-        out_dict['sparse_deformed'] = deformed_source
+        # out_dict['sparse_deformed'] = deformed_source
 
         input = tf.concat([heatmap_representation, deformed_source], axis=-1)  # B, 64, 64, 11, 4
         input = tf.reshape(input, [bs, h, w, -1])  # B, 44, 64, 64
@@ -125,19 +125,19 @@ class DenseMotionNetwork(layers.Layer):
 
         mask = self.mask(prediction)  # B, 64, 64, 11
         mask = tf.nn.softmax(mask, axis=-1)  # B, 64, 64, 11
-        out_dict['mask'] = mask
+        # out_dict['mask'] = mask
         mask = tf.expand_dims(mask, -1)  # B, 64, 64, 11, 1
         deformation = tf.reduce_sum(sparse_motion * mask, axis=3)  # B, 64, 64, 2
         # deformation = deformation.permute(0, 2, 3, 1)  # B, 64, 64, 2
 
-        out_dict['deformation'] = deformation
+        # out_dict['deformation'] = deformation
 
         # Sec. 3.2 in the paper
         if self.occlusion:
             occlusion_map = tf.keras.activations.sigmoid(self.occlusion(prediction))  # B, 64, 64, 1
-            out_dict['occlusion_map'] = occlusion_map
+            # out_dict['occlusion_map'] = occlusion_map
 
-        return out_dict
+        return deformation, occlusion_map
 
     def forward_setup(self, source_image):
         if self.scale_factor != 1:

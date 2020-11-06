@@ -76,17 +76,17 @@ class OcclusionAwareGenerator(tf.keras.Model):
             out = down_block(out)
 
         # Transforming feature representation according to deformation and occlusion
-        output_dict = {}
-        dense_motion = self.dense_motion_network(
+        # output_dict = {}
+        deformation, occlusion_map = self.dense_motion_network(
             (source_image, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian)
         )
-        output_dict['mask'] = dense_motion['mask']
-        output_dict['sparse_deformed'] = dense_motion['sparse_deformed']
+        # output_dict['mask'] = dense_motion['mask']
+        # output_dict['sparse_deformed'] = dense_motion['sparse_deformed']
 
-        occlusion_map = dense_motion['occlusion_map']
-        output_dict['occlusion_map'] = occlusion_map
+        # occlusion_map = dense_motion['occlusion_map']
+        # output_dict['occlusion_map'] = occlusion_map
 
-        deformation = dense_motion['deformation']
+        # deformation = dense_motion['deformation']
         # out [B, 64, 64, 256]
         # deformation [B, 64, 64, 2]
         out = self.deform_input(out, deformation)  # B, 64, 64, 256
@@ -95,7 +95,7 @@ class OcclusionAwareGenerator(tf.keras.Model):
             occlusion_map = resize_bilinear(occlusion_map, (out.shape[1:3]))
         out = out * occlusion_map
 
-        output_dict["deformed"] = self.deform_input(source_image, deformation)
+        # output_dict["deformed"] = self.deform_input(source_image, deformation)
 
         # Decoding part
         out = self.bottleneck(out)  # B, 64, 64, 256
@@ -106,9 +106,9 @@ class OcclusionAwareGenerator(tf.keras.Model):
         out = self.final(out)  # B, 256, 256, 3
         out = tf.nn.sigmoid(out)
 
-        output_dict["prediction"] = out
+        # output_dict["prediction"] = out
 
-        return output_dict
+        return out
 
     def forward_setup(self, source_image):
         out = self.first(source_image)
