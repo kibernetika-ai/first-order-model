@@ -19,10 +19,11 @@ class OcclusionAwareGenerator(tf.keras.Model):
         super(OcclusionAwareGenerator, self).__init__()
 
         if dense_motion_params is not None:
+            pp = dict(**dense_motion_params)
             self.dense_motion_network = DenseMotionNetwork(
                 num_kp=num_kp, num_channels=num_channels,
                 estimate_occlusion_map=estimate_occlusion_map,
-                **dense_motion_params
+                **pp
             )
         else:
             self.dense_motion_network = None

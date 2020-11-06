@@ -20,10 +20,7 @@ class DenseMotionNetwork(layers.Layer):
 
         self.mask = layers.Conv2D(num_kp + 1, kernel_size=(7, 7), padding='SAME')
 
-        if estimate_occlusion_map:
-            self.occlusion = layers.Conv2D(1, kernel_size=(7, 7), padding='SAME')
-        else:
-            self.occlusion = None
+        self.occlusion = layers.Conv2D(1, kernel_size=(7, 7), padding='SAME')
 
         self.num_kp = num_kp
         self.scale_factor = scale_factor
@@ -37,27 +34,31 @@ class DenseMotionNetwork(layers.Layer):
         self.occlusion = None
         self.down = None
 
+    @tf.function
     def create_heatmap_representations(self, source_image, kp_driving_value, kp_source_value):
         """
         Eq 6. in the paper H_k(z)
         """
         spatial_size = tf.shape(source_image)[1:3]
+
         gaussian_driving = kp2gaussian(kp_driving_value, spatial_size=spatial_size, kp_variance=self.kp_variance)
         gaussian_source = kp2gaussian(kp_source_value, spatial_size=spatial_size, kp_variance=self.kp_variance)
         heatmap = gaussian_driving - gaussian_source
 
         # adding background feature
-        zeros = tf.zeros([heatmap.shape[0], spatial_size[0], spatial_size[1], 1], dtype=heatmap.dtype)
+        zeros = tf.zeros([tf.shape(heatmap)[0], spatial_size[0], spatial_size[1], 1], dtype=heatmap.dtype)
         heatmap = tf.concat([zeros, heatmap], axis=-1)
         heatmap = tf.expand_dims(heatmap, -1)  # B, H, W, C, 1
         return heatmap
 
+    @tf.function
     def create_sparse_motions(self, source_image, kp_driving_value, kp_driving_jacobian,
                               kp_source_value, kp_source_jacobian):
         """
         Eq 4. in the paper T_{s<-d}(z)
         """
-        bs, h, w, _ = source_image.shape
+        shape = tf.shape(source_image)
+        bs, h, w = shape[0], shape[1], shape[2]
         identity_grid = make_coordinate_grid((h, w), type=kp_source_value.dtype)
         # identity_grid = tf.expand_dims(tf.expand_dims(identity_grid, 0), 3)  # 1, h, w, 1, 2
         identity_grid = tf.reshape(identity_grid, [1, h, w, 1, 2])  # 1, 64, 64, 1, 2
@@ -76,13 +77,13 @@ class DenseMotionNetwork(layers.Layer):
         sparse_motions = tf.concat([identity_grid, driving_to_source], axis=3)  # B, 64, 64, 11, 2
         return sparse_motions
 
+    @tf.function
     def create_deformed_source_image(self, source_image, sparse_motions):
         """
         Eq 7. in the paper \hat{T}_{s<-d}(z)
         """
-        bs, h, w, _ = source_image.shape  # B, 64, 64, 3
-        # source_repeat = source_image.unsqueeze(1).unsqueeze(1).repeat(1, self.num_kp + 1, 1, 1, 1,
-        #                                                               1)  # B, 11, 1, 3, 64, 64
+        shape = tf.shape(source_image)  # B, 64, 64, 3
+        bs, h, w = shape[0], shape[1], shape[2]
         source_repeat = tf.tile(source_image, [self.num_kp + 1, 1, 1, 1])  # B*11, 64, 64, 3
 
         # source_repeat = source_repeat.view(bs * (self.num_kp + 1), -1, h, w)  # B*11, 64, 64, 3
@@ -104,7 +105,8 @@ class DenseMotionNetwork(layers.Layer):
         if self.scale_factor != 1:
             source_image = self.down(source_image)
 
-        bs, h, w, _ = source_image.shape
+        shape = tf.shape(source_image)
+        bs, h, w = shape[0], shape[1], shape[2]
 
         # out_dict = dict()
         heatmap_representation = self.create_heatmap_representations(
@@ -133,48 +135,7 @@ class DenseMotionNetwork(layers.Layer):
         # out_dict['deformation'] = deformation
 
         # Sec. 3.2 in the paper
-        if self.occlusion:
-            occlusion_map = tf.keras.activations.sigmoid(self.occlusion(prediction))  # B, 64, 64, 1
-            # out_dict['occlusion_map'] = occlusion_map
+        occlusion_map = tf.keras.activations.sigmoid(self.occlusion(prediction))  # B, 64, 64, 1
+        # out_dict['occlusion_map'] = occlusion_map
 
         return deformation, occlusion_map
-
-    def forward_setup(self, source_image):
-        if self.scale_factor != 1:
-            source_image = self.down(source_image)
-        return source_image
-
-    def forward_step(self, source_image,  kp_driving_value, kp_driving_jacobian,
-                     kp_source_value, kp_source_jacobian):
-        bs, h, w, _ = source_image.shape
-        out_dict = dict()
-        heatmap_representation = self.create_heatmap_representations(source_image, kp_driving_value, kp_source_value)
-        sparse_motion = self.create_sparse_motions(
-            source_image,
-            kp_driving_value, kp_driving_jacobian,
-            kp_source_value, kp_source_jacobian
-        )  # B, 64, 64, 11, 2
-        deformed_source = self.create_deformed_source_image(source_image, sparse_motion)
-        # out_dict['sparse_deformed'] = deformed_source
-
-        input = tf.concat([heatmap_representation, deformed_source], axis=-1)  # B, 64, 64, 11, 4
-        input = tf.reshape(input, [bs, h, w, -1])  # B, 44, 64, 64
-
-        prediction = self.hourglass(input)
-
-        mask = self.mask(prediction)
-        mask = tf.nn.softmax(mask, axis=-1)  # B, 64, 64, 11
-        # out_dict['mask'] = mask
-        mask = tf.expand_dims(mask, -1)  # B, 64, 64, 11, 1
-        # sparse_motion = sparse_motion.permute(0, 1, 4, 2, 3)
-        deformation = tf.reduce_sum(sparse_motion * mask, axis=3)  # B, 64, 64, 2
-        # deformation = deformation.permute(0, 2, 3, 1)
-
-        out_dict['deformation'] = deformation
-
-        # Sec. 3.2 in the paper
-        if self.occlusion:
-            occlusion_map = tf.keras.activations.sigmoid(self.occlusion(prediction))  # B, 64, 64, 1
-            out_dict['occlusion_map'] = occlusion_map
-
-        return out_dict

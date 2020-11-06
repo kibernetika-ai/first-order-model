@@ -10,9 +10,10 @@ def kp2gaussian(kp_value, spatial_size, kp_variance):
     mean = kp_value  # B, 10, 2
 
     coordinate_grid = make_coordinate_grid(spatial_size, mean.dtype)  # 64, 64, 2
+    grid_shape = tf.shape(coordinate_grid)
     coordinate_grid = tf.reshape(
         coordinate_grid,
-        [1, coordinate_grid.shape[0], coordinate_grid.shape[1], 1, 2]
+        [1, grid_shape[0], grid_shape[1], 1, 2]
     )  # 1, 64, 64, 1, 2
     # repeats =   # B, 1, 1, 10, 1
     coordinate_grid = tf.tile(coordinate_grid, [tf.shape(mean)[0], 1, 1, mean.shape[1], 1])  # B, 64, 64, 10, 2
@@ -31,7 +32,7 @@ def make_coordinate_grid(spatial_size, type):
     """
     Create a meshgrid [-1,1] x [-1,1] of given spatial_size.
     """
-    h, w = spatial_size
+    h, w = spatial_size[0], spatial_size[1]
     x = tf.range(w, dtype=type)
     y = tf.range(h, dtype=type)
 
