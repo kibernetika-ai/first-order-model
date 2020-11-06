@@ -97,7 +97,7 @@ class FramesDataset(object):
         if all(os.path.isdir(os.path.join(root_dir, v)) for v in self.videos):
             LOG.info('Detected 2-level videos dataset.')
             if not self.id_sampling:
-                self.videos = glob.glob(os.path.join(root_dir, '*/*'))
+                self.videos = [p for p in glob.glob(os.path.join(root_dir, '*/*')) if os.path.isdir(p)]
 
         if pairs_list:
             self.pairs_list = os.path.join(self.root_dir, pairs_list)
@@ -148,12 +148,12 @@ class FramesDataset(object):
             path = np.random.choice(glob.glob(os.path.join(self.root_dir, name, '**/*.mp4'), recursive=True))
         elif self.is_train and self.id_sampling and not self.video_dataset:
             name = self.videos[idx]
-            path = np.random.choice(glob.glob(os.path.join(self.root_dir, name, '*'), recursive=True))
+            paths = glob.glob(os.path.join(self.root_dir, name, '*'), recursive=True)
+            dir_paths = [p for p in paths if os.path.isdir(p)]
+            path = np.random.choice(dir_paths)
         else:
             name = self.videos[idx]
             path = os.path.join(self.root_dir, name)
-
-        video_name = os.path.basename(path)
 
         if self.is_train and os.path.isdir(path):
             frames = glob.glob(os.path.join(path, '*.jpg'))
