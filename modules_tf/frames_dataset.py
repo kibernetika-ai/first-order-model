@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 import tensorflow as tf
 
-from augmentation import AllAugmentationTransform
+from modules_tf.augmentation import AllAugmentationTransform
 
 
 LOG = logging.getLogger(__name__)
