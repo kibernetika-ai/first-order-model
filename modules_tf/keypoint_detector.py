@@ -1,7 +1,6 @@
-import numpy as np
-
 import tensorflow as tf
 from tensorflow.keras import layers
+
 from modules_tf.util import Hourglass, make_coordinate_grid, AntiAliasInterpolation2d
 
 

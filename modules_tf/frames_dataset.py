@@ -1,3 +1,5 @@
+import glob
+import logging
 import os
 
 import cv2
@@ -6,10 +8,11 @@ from skimage.color import gray2rgb
 from sklearn.model_selection import train_test_split
 import numpy as np
 import tensorflow as tf
-from torch.utils.data import Dataset
-import pandas as pd
+
 from augmentation import AllAugmentationTransform
-import glob
+
+
+LOG = logging.getLogger(__name__)
 
 
 def read_video(name, frame_shape, is_train=True):
@@ -66,7 +69,7 @@ def read_video(name, frame_shape, is_train=True):
     return video_array
 
 
-class FramesDataset(Dataset):
+class FramesDataset(object):
     """
     Dataset of videos, each video can be represented as:
       - an image of concatenated frames
@@ -80,10 +83,15 @@ class FramesDataset(Dataset):
         if data_dir is not None:
             root_dir = data_dir
 
-        print(f'Dataset root dir {root_dir}.')
+        LOG.info(f'Dataset root dir {root_dir}.')
 
         self.root_dir = os.path.join(root_dir)
         self.videos = os.listdir(root_dir)
+        if all(os.path.isdir(os.path.join(root_dir, v)) for v in self.videos):
+            LOG.info('Detected 2-level videos dataset.')
+            if not self.id_sampling:
+                self.videos = glob.glob(os.path.join(root_dir, '*/*'))
+
         self.frame_shape = tuple(frame_shape)
         self.repeats = repeats
         if pairs_list:
@@ -93,7 +101,7 @@ class FramesDataset(Dataset):
         self.id_sampling = id_sampling
         if os.path.exists(os.path.join(root_dir, 'train')):
             assert os.path.exists(os.path.join(root_dir, 'test'))
-            print("Use predefined train-test split.")
+            LOG.info("Use predefined train-test split.")
             if id_sampling:
                 train_videos = {os.path.basename(video).split('#')[0] for video in
                                 os.listdir(os.path.join(root_dir, 'train'))}
@@ -103,8 +111,8 @@ class FramesDataset(Dataset):
             test_videos = os.listdir(os.path.join(root_dir, 'test'))
             self.root_dir = os.path.join(self.root_dir, 'train' if is_train else 'test')
         else:
-            print("Use random train-test split.")
-            train_videos, test_videos = train_test_split(self.videos, random_state=random_seed, test_size=0.2)
+            LOG.info("Use random train-test split.")
+            train_videos, test_videos = train_test_split(self.videos, random_state=random_seed, test_size=0.1)
 
         if is_train:
             self.videos = train_videos
@@ -114,16 +122,17 @@ class FramesDataset(Dataset):
         name = self.videos[0]
         path = glob.glob(os.path.join(self.root_dir, name, '**/*.jpg'), recursive=True)
         if len(path) > 0:
-            print(f'Detected frame dataset by {path[0]}.')
+            LOG.info(f'Detected frame dataset by {path[0]}.')
             self.video_dataset = False
         else:
-            print(f'Detected video dataset.')
+            LOG.info(f'Detected video dataset.')
             self.video_dataset = True
 
         self.is_train = is_train
 
         if self.is_train:
             self.transform = AllAugmentationTransform(**augmentation_params)
+            # self.transform = None
         else:
             self.transform = None
 
@@ -198,62 +207,3 @@ class FramesDataset(Dataset):
             (tf.TensorShape([None, None, 3]), tf.TensorShape([None, None, 3]))
         )
         return dataset.repeat(self.repeats).padded_batch(batch_size, drop_remainder=True).prefetch(batch_size * 2)
-
-
-class DatasetRepeater(Dataset):
-    """
-    Pass several times over the same dataset for better i/o performance
-    """
-
-    def __init__(self, dataset, num_repeats=100):
-        self.dataset = dataset
-        self.num_repeats = num_repeats
-
-    def __len__(self):
-        return self.num_repeats * self.dataset.__len__()
-
-    def __getitem__(self, idx):
-        return self.dataset[idx % self.dataset.__len__()]
-
-
-class PairedDataset(Dataset):
-    """
-    Dataset of pairs for animation.
-    """
-
-    def __init__(self, initial_dataset, number_of_pairs, seed=0):
-        self.initial_dataset = initial_dataset
-        pairs_list = self.initial_dataset.pairs_list
-
-        np.random.seed(seed)
-
-        if pairs_list is None:
-            max_idx = min(number_of_pairs, len(initial_dataset))
-            nx, ny = max_idx, max_idx
-            xy = np.mgrid[:nx, :ny].reshape(2, -1).T
-            number_of_pairs = min(xy.shape[0], number_of_pairs)
-            self.pairs = xy.take(np.random.choice(xy.shape[0], number_of_pairs, replace=False), axis=0)
-        else:
-            videos = self.initial_dataset.videos
-            name_to_index = {name: index for index, name in enumerate(videos)}
-            pairs = pd.read_csv(pairs_list)
-            pairs = pairs[np.logical_and(pairs['source'].isin(videos), pairs['driving'].isin(videos))]
-
-            number_of_pairs = min(pairs.shape[0], number_of_pairs)
-            self.pairs = []
-            self.start_frames = []
-            for ind in range(number_of_pairs):
-                self.pairs.append(
-                    (name_to_index[pairs['driving'].iloc[ind]], name_to_index[pairs['source'].iloc[ind]]))
-
-    def __len__(self):
-        return len(self.pairs)
-
-    def __getitem__(self, idx):
-        pair = self.pairs[idx]
-        first = self.initial_dataset[pair[0]]
-        second = self.initial_dataset[pair[1]]
-        first = {'driving_' + key: value for key, value in first.items()}
-        second = {'source_' + key: value for key, value in second.items()}
-
-        return {**first, **second}

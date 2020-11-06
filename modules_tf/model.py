@@ -7,7 +7,7 @@ from modules_tf.util import AntiAliasInterpolation2d, make_coordinate_grid
 vgg19_feat_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
 
 
-def vgg_19(input_tensor=None, input_shape=(256, 256, 3)):
+def vgg_19(input_tensor=None, input_shape=(None, None, 3)):
     vgg19 = tf.keras.applications.VGG19(input_tensor=input_tensor, include_top=False, input_shape=input_shape)
     outputs = []
     for layer_name in vgg19_feat_layers:
@@ -57,9 +57,10 @@ class Transform:
             self.tps = False
 
     def transform_frame(self, frame):
-        grid = tf.expand_dims(make_coordinate_grid(frame.shape[1:3], type=frame.dtype), 0)
+        grid = tf.expand_dims(make_coordinate_grid(frame.shape[1:3], type=frame.dtype), 0)  # 1, H, W, 2
         grid = tf.reshape(grid, (1, frame.shape[1] * frame.shape[2], 2))
         grid = tf.reshape(self.warp_coordinates(grid), (self.bs, frame.shape[1], frame.shape[2], 2))
+        grid = tf.transpose(grid, [0, 3, 1, 2])
         return bilinear_sampler(frame, grid[:, 0, :, :], grid[:, 1, :, :])
         # return F.grid_sample(frame, grid, padding_mode="reflection")
 
@@ -83,13 +84,15 @@ class Transform:
 
         return transformed
 
-    def jacobian(self, coordinates):
+    def jacobian(self, coordinates, grad_tape):
         new_coordinates = self.warp_coordinates(coordinates)
+        # test_jacobian = grad_tape.jacobian(new_coordinates, coordinates)
+        grad_x = grad_tape.gradient(tf.reduce_sum(new_coordinates[..., 0]), coordinates)  # B, 10, 2
+        grad_y = grad_tape.gradient(tf.reduce_sum(new_coordinates[..., 1]), coordinates)  # B, 10, 2
+
         # grad_x = grad(new_coordinates[..., 0].sum(), coordinates, create_graph=True)
-        grad_x = tf.gradients(tf.reduce_sum(new_coordinates[..., 0]), coordinates)  # B, 10, 2
         # grad_y = grad(new_coordinates[..., 1].sum(), coordinates, create_graph=True)
-        grad_y = tf.gradients(tf.reduce_sum(new_coordinates[..., 1]), coordinates)  # B, 10, 2
-        jacobian = tf.concat([tf.expand_dims(grad_x[0], -2), tf.expand_dims(grad_y[0], -2)], axis=-2)  # B, 10, 2, 2
+        jacobian = tf.concat([tf.expand_dims(grad_x, -2), tf.expand_dims(grad_y, -2)], axis=-2)  # B, 10, 2, 2
         return jacobian
 
 
@@ -107,6 +110,8 @@ class GeneratorFullModel(layers.Layer):
         self.scales = train_params['scales']
         self.disc_scales = self.discriminator.scales
         self.pyramid = ImagePyramid(self.scales, generator.num_channels)
+        self.transform = None
+        self.grad_tape = None
 
         self.loss_weights = train_params['loss_weights']
 
@@ -161,8 +166,10 @@ class GeneratorFullModel(layers.Layer):
                     loss_values['feature_matching'] = value_total
 
         if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) != 0:
-            transform = Transform(x_driving.shape[0], **self.train_params['transform_params'])
-            transformed_frame = transform.transform_frame(x_driving)
+            if self.transform is None:
+                self.transform = Transform(x_driving.shape[0], **self.train_params['transform_params'])
+
+            transformed_frame = self.transform.transform_frame(x_driving)
             transformed_kp_value, transformed_kp_jacobian = self.kp_extractor(transformed_frame)
 
             generated['transformed_frame'] = transformed_frame
@@ -171,13 +178,13 @@ class GeneratorFullModel(layers.Layer):
 
             # Value loss part
             if self.loss_weights['equivariance_value'] != 0:
-                value = tf.reduce_mean(tf.abs(kp_driving_value - transform.warp_coordinates(transformed_kp_value)))
+                value = tf.reduce_mean(tf.abs(kp_driving_value - self.transform.warp_coordinates(transformed_kp_value)))
                 loss_values['equivariance_value'] = self.loss_weights['equivariance_value'] * value
 
             # jacobian loss part
             if self.loss_weights['equivariance_jacobian'] != 0:
                 jacobian_transformed = tf.matmul(
-                    transform.jacobian(transformed_kp_value),
+                    self.transform.jacobian(transformed_kp_value, self.grad_tape),
                     transformed_kp_jacobian
                 )
 
