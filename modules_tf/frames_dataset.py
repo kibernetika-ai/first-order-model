@@ -1,6 +1,7 @@
 import glob
 import logging
 import os
+import random
 
 import cv2
 from skimage import io, img_as_float32
@@ -78,11 +79,12 @@ class FramesDataset(object):
     """
 
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
-                 random_seed=0, pairs_list=None, augmentation_params=None, repeats=1):
+                 random_seed=0, pairs_list=None, augmentation_params=None, repeats=1, shuffle=True):
         self.id_sampling = id_sampling
         self.frame_shape = tuple(frame_shape)
         self.repeats = repeats
         self.is_train = is_train
+        self.shuffle = shuffle
 
         data_dir = os.environ.get("DATA_DIR")
         if data_dir is not None:
@@ -198,6 +200,7 @@ class FramesDataset(object):
         return source, driving
 
     def generator(self):
+        random.shuffle(self.videos)
         for i in range(len(self)):
             yield self[i]
 

@@ -127,7 +127,8 @@ def main():
     if len(dataset) < 10 and opt.repeats < 10:
         dataset.repeats = 100 // len(dataset)
 
-    LOG.info(f'Dataset length: {len(dataset) * dataset.repeats}')
+    LOG.info(f'Dataset length: {len(dataset)}')
+    LOG.info(f'Dataset length (with repeats): {len(dataset) * dataset.repeats}')
 
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
@@ -149,10 +150,11 @@ def main():
 
 def train(config, generator, discriminator, kp_detector, log_dir, dataset):
     train_params = config['train_params']
+    batch_size = train_params['batch_size']
 
     step_var = tf.Variable(initial_value=0, dtype=tf.int32)
 
-    input_fn = dataset.get_input_fn(train_params['batch_size'])
+    input_fn = dataset.get_input_fn(batch_size)
     optimizer_generator = tf.keras.optimizers.Adam(
         learning_rate=train_params['lr_generator'], beta_1=0.5, beta_2=0.999
     )
@@ -172,7 +174,7 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
         optimizer_kp_detector=optimizer_kp_detector,
         step_var=step_var
     )
-    manager = tf.train.CheckpointManager(checkpoint, log_dir, max_to_keep=3)
+    manager = tf.train.CheckpointManager(checkpoint, log_dir, max_to_keep=2)
     prev_step = 0
     if manager.restore_or_initialize():
         prev_step = manager.checkpoint.step_var.numpy()
@@ -181,6 +183,16 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
         LOG.info(f'Initialized at {prev_step} step.')
 
     start_epoch = 0
+    num_batches = len(dataset) * dataset.repeats // batch_size
+    log_step = int(round(0.005 * num_batches + 20))
+    log_epoch = 1
+    save_checkpoint = 1000
+    if num_batches <= 100:
+        log_step = 50
+        log_epoch = 300 // num_batches
+
+    LOG.info(f"Will log each {log_step} step.")
+    LOG.info(f"Will save checkpoint each {save_checkpoint} step.")
 
     tf.keras.optimizers.schedules.LearningRateSchedule()
     # scheduler_generator = MultiStepLR(optimizer_generator, train_params['epoch_milestones'], gamma=0.1,
@@ -240,7 +252,7 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
             step = prev_step + i.numpy() + int(epoch * len(dataset) * dataset.repeats / train_params['batch_size'])
             losses, generated = train_step(x_source, x_driving, tf.constant(epoch), tf.constant(step))
 
-            if step % 100 == 0:
+            if step % log_step == 0:
                 LOG.info(
                     f'Epoch {epoch + 1}, global step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}'
                 )
@@ -254,8 +266,8 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
                 pred = generated['prediction'][0].numpy()
                 kp_source = kp_source * 127.5 + 127.5
                 kp_driving = kp_driving * 127.5 + 127.5
-                source = cv2.UMat((source * 255.).clip(0, 255).astype(np.uint8)).get()
-                driving = cv2.UMat((driving * 255.).clip(0, 255).astype(np.uint8)).get()
+                source = (source * 255.).clip(0, 255).astype(np.uint8)
+                driving = (driving * 255.).clip(0, 255).astype(np.uint8)
                 pred = (pred * 255.).clip(0, 255).astype(np.uint8)
                 for x1, y1 in kp_source:
                     cv2.circle(source, (int(x1), int(y1)), 2, (250, 250, 250), thickness=cv2.FILLED)
@@ -270,8 +282,15 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
                     summary_writer.flush()
 
             step_var.assign_add(1)
-            if step % 100 == 0:
+            if step != 0 and step % save_checkpoint == 0:
+                LOG.info('Saving model...')
                 manager.save()
+                LOG.info('Done saving.')
+
+        if epoch % log_epoch == 0:
+            LOG.info('Saving model...')
+            manager.save()
+            LOG.info('Done saving.')
 
 
 def export(generator, discriminator, kp_detector, log_dir, input_fn):
