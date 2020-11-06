@@ -59,6 +59,7 @@ class OcclusionAwareGenerator(tf.keras.Model):
         self.first = None
         self.dense_motion_network.clean_up()
 
+    @tf.function
     def deform_input(self, inp, deformation):
         _, h_old, w_old, _ = deformation.shape  # B, 64, 64, 2
         _, h, w, _ = inp.shape

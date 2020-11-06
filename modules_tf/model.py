@@ -35,11 +35,12 @@ class ImagePyramid(layers.Layer):
         return out_dict
 
 
-class Transform:
+class Transform(layers.Layer):
     """
     Random tps transformation for equivariance constraints. See Sec 3.3
     """
     def __init__(self, bs, **kwargs):
+        super().__init__()
         noise = tf.random.normal(shape=[bs, 2, 3], mean=0, stddev=kwargs['sigma_affine'] * tf.ones([bs, 2, 3]))
         self.theta = noise + tf.reshape(tf.eye(2, 3), [1, 2, 3])
         self.bs = bs
@@ -56,6 +57,7 @@ class Transform:
         else:
             self.tps = False
 
+    @tf.function
     def transform_frame(self, frame):
         grid = tf.expand_dims(make_coordinate_grid(frame.shape[1:3], type=frame.dtype), 0)  # 1, H, W, 2
         grid = tf.reshape(grid, (1, frame.shape[1] * frame.shape[2], 2))
@@ -64,6 +66,7 @@ class Transform:
         return bilinear_sampler(frame, grid[:, 0, :, :], grid[:, 1, :, :])
         # return F.grid_sample(frame, grid, padding_mode="reflection")
 
+    @tf.function
     def warp_coordinates(self, coordinates):  # 1, H*W, 2
         theta = self.theta  # B, 2, 3
         theta = tf.expand_dims(theta, 1)  # B, 1, 2, 3
@@ -118,6 +121,8 @@ class GeneratorFullModel(layers.Layer):
         if sum(self.loss_weights['perceptual']) != 0:
             self.vgg = vgg_19()
 
+        self.transform = Transform(train_params['batch_size'], **self.train_params['transform_params'])
+
     def call(self, inputs, **kwargs):
         x_source, x_driving = inputs
         kp_source_value, kp_source_jacobian = self.kp_extractor(x_source)
@@ -171,8 +176,8 @@ class GeneratorFullModel(layers.Layer):
                     loss_values['feature_matching'] = value_total
 
         if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) != 0:
-            if self.transform is None:
-                self.transform = Transform(x_driving.shape[0], **self.train_params['transform_params'])
+            # if self.transform is None:
+            #     self.transform = Transform(x_driving.shape[0], **self.train_params['transform_params'])
 
             transformed_frame = self.transform.transform_frame(x_driving)
             transformed_kp_value, transformed_kp_jacobian = self.kp_extractor(transformed_frame)

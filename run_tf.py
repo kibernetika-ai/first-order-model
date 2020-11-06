@@ -127,7 +127,7 @@ def main():
     if len(dataset) < 10 and opt.repeats < 10:
         dataset.repeats = 100 // len(dataset)
 
-    LOG.info(f'Dataset length: {len(dataset)}')
+    LOG.info(f'Dataset length: {len(dataset) * dataset.repeats}')
 
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
@@ -151,7 +151,6 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
     train_params = config['train_params']
 
     step_var = tf.Variable(initial_value=0, dtype=tf.int32)
-
 
     input_fn = dataset.get_input_fn(train_params['batch_size'])
     optimizer_generator = tf.keras.optimizers.Adam(
@@ -178,9 +177,8 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
     if manager.restore_or_initialize():
         prev_step = manager.checkpoint.step_var.numpy()
 
-    LOG.info(f'Initialized at {manager.checkpoint.step_var.numpy()} step.')
-    if manager.checkpoint.step_var.numpy() != 0:
-        LOG.info(f'Initialized at {manager.checkpoint.step_var.numpy()} step.')
+    if prev_step != 0:
+        LOG.info(f'Initialized at {prev_step} step.')
 
     start_epoch = 0
 
@@ -199,52 +197,53 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
     summary_writer = tf.summary.create_file_writer(log_dir, flush_millis=60000)
 
     @tf.function
-    def train_step(x_source, x_driving, step):
-        pass
+    def train_step(x_source, x_driving, epoch, step):
+        with tf.GradientTape(persistent=True) as tape:
+            generator_full.grad_tape = tape
+            losses_generator, generated = generator_full((x_source, x_driving), training=True)
+
+            loss_values = [tf.reduce_mean(val) for val in losses_generator.values()]
+            loss = tf.reduce_sum(loss_values)
+
+            if train_params['loss_weights']['generator_gan'] != 0:
+                losses_discriminator = discriminator_full(
+                    (x_driving, generated['kp_driving_value'], generated['prediction'])
+                )
+                loss_values = [tf.reduce_mean(val) for val in losses_discriminator.values()]
+                disc_loss = tf.reduce_sum(loss_values)
+
+            else:
+                losses_discriminator = {}
+
+            losses_generator.update(losses_discriminator)
+            losses = {key: tf.reduce_mean(value) for key, value in losses_generator.items()}
+            # logger.log_iter(losses=losses)
+
+        generator_gradients = tape.gradient(loss, generator.trainable_variables)
+        kp_detector_gradients = tape.gradient(loss, kp_detector.trainable_variables)
+        optimizer_generator.apply_gradients(
+            zip(generator_gradients, generator.trainable_variables)
+        )
+        optimizer_kp_detector.apply_gradients(
+            zip(kp_detector_gradients, kp_detector.trainable_variables)
+        )
+
+        disc_gradients = tape.gradient(disc_loss, discriminator.trainable_variables)
+        optimizer_discriminator.apply_gradients(
+            zip(disc_gradients, discriminator.trainable_variables)
+        )
+
+        return losses, generated
 
     for epoch in range(start_epoch, train_params['num_epochs']):
         for i, (x_source, x_driving) in input_fn.enumerate():
             step = prev_step + i.numpy() + int(epoch * len(dataset) * dataset.repeats / train_params['batch_size'])
-            with tf.GradientTape(persistent=True) as tape:
-                generator_full.grad_tape = tape
-                losses_generator, generated = generator_full((x_source, x_driving), training=True)
+            losses, generated = train_step(x_source, x_driving, tf.constant(epoch), tf.constant(step))
 
-                loss_values = [tf.reduce_mean(val) for val in losses_generator.values()]
-                loss = tf.reduce_sum(loss_values)
-
-                if train_params['loss_weights']['generator_gan'] != 0:
-                    losses_discriminator = discriminator_full(
-                        (x_driving, generated['kp_driving_value'], generated['prediction'])
-                    )
-                    loss_values = [tf.reduce_mean(val) for val in losses_discriminator.values()]
-                    disc_loss = tf.reduce_sum(loss_values)
-
-                else:
-                    losses_discriminator = {}
-
-                losses_generator.update(losses_discriminator)
-                losses = {key: tf.reduce_mean(value) for key, value in losses_generator.items()}
-                # logger.log_iter(losses=losses)
-
-            generator_gradients = tape.gradient(loss, generator.trainable_variables)
-            kp_detector_gradients = tape.gradient(loss, kp_detector.trainable_variables)
-            optimizer_generator.apply_gradients(
-                zip(generator_gradients, generator.trainable_variables)
-            )
-            optimizer_kp_detector.apply_gradients(
-                zip(kp_detector_gradients, kp_detector.trainable_variables)
-            )
-
-            disc_gradients = tape.gradient(disc_loss, discriminator.trainable_variables)
-            optimizer_discriminator.apply_gradients(
-                zip(disc_gradients, discriminator.trainable_variables)
-            )
-            if step % 20 == 0:
+            if step % 100 == 0:
                 LOG.info(
                     f'Epoch {epoch + 1}, global step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}'
                 )
-
-            if step != 0 and step % 50 == 0:
                 for k, loss in losses.items():
                     with summary_writer.as_default():
                         tf.summary.scalar(k, loss, step=step)

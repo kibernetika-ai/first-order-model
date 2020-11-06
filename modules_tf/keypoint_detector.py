@@ -73,32 +73,3 @@ class KPDetector(tf.keras.Model):
         jacobian = tf.reshape(jacobian, [jacobian_shape[0], jacobian_shape[1], 2, 2])  # B, num_kp, 2, 2
 
         return out, jacobian
-
-    def forward_script(self, x):
-        if self.scale_factor != 1:
-            x = self.down(x)
-
-        feature_map = self.predictor(x)
-        prediction = self.kp(feature_map)
-
-        final_shape = prediction.shape
-        heatmap = tf.reshape(prediction, [final_shape[0], -1, final_shape[1]])  # [N, HxW, C]
-        heatmap = tf.nn.softmax(heatmap / self.temperature, axis=1)  # [N, HxW, C]
-        heatmap = tf.reshape(heatmap, [*final_shape])  # [N, H, W, C]
-
-        out = self.gaussian2kp(heatmap)
-
-        if self.jacobian is not None:
-            jacobian_map = self.jacobian(feature_map)
-            jacobian_map = tf.reshape(
-                jacobian_map,
-                [final_shape[0], self.num_jacobian_maps, 4, final_shape[2], final_shape[3]]
-            )
-            heatmap = tf.expand_dims(heatmap, 2)
-
-            jacobian = heatmap * jacobian_map
-            jacobian = tf.reshape(jacobian, [final_shape[0], final_shape[1], 4, -1])
-            jacobian = tf.reduce_sum(jacobian, axis=-1)
-            jacobian = tf.reshape(jacobian, [jacobian.shape[0], jacobian.shape[1], 2, 2])
-
-        return out['value'], jacobian
