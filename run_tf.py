@@ -237,12 +237,16 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
 
         generator_gradients = tape.gradient(loss, generator.trainable_variables)
         kp_detector_gradients = tape.gradient(loss, kp_detector.trainable_variables)
+        # kp_loss_gradients = tape.gradient(losses_generator['kp_loss'], kp_detector.trainable_variables)
         optimizer_generator.apply_gradients(
             zip(generator_gradients, generator.trainable_variables)
         )
         optimizer_kp_detector.apply_gradients(
             zip(kp_detector_gradients, kp_detector.trainable_variables)
         )
+        # optimizer_kp_detector.apply_gradients(
+        #     zip(kp_loss_gradients, kp_detector.trainable_variables)
+        # )
 
         disc_gradients = tape.gradient(disc_loss, discriminator.trainable_variables)
         optimizer_discriminator.apply_gradients(

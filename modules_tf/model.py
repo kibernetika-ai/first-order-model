@@ -1,6 +1,8 @@
 from stn.transformer import bilinear_sampler
 import tensorflow as tf
 from tensorflow.keras import layers
+from tensorflow_addons.losses import metric_learning
+
 from modules_tf.util import AntiAliasInterpolation2d, make_coordinate_grid
 
 
@@ -141,6 +143,26 @@ class GeneratorFullModel(layers.Layer):
 
         pyramide_real = self.pyramid(x_driving)
         pyramide_generated = self.pyramid(generated_prediction)
+
+        # kp detector normalize loss
+        kp_source_loss = 0.
+        kp_driving_loss = 0.
+        for kp in kp_source_value:
+            distances = metric_learning.pairwise_distance(kp)
+            v, idx = tf.nn.top_k(-distances, 2)
+            mins = -v[:, 1]  # 10
+            # tf.print(mins)
+            kp_source_loss += tf.reduce_sum(2 - mins)
+        
+        for kp in kp_driving_value:
+            distances = metric_learning.pairwise_distance(kp)
+            v, idx = tf.nn.top_k(-distances, 2)
+            mins = -v[:, 1]  # 10
+            # tf.print(mins)
+            kp_driving_loss += tf.reduce_sum(2 - mins)
+
+        kp_loss = kp_source_loss + kp_driving_loss
+        loss_values['kp_loss'] = kp_loss
 
         if sum(self.loss_weights['perceptual']) != 0:
             value_total = 0
