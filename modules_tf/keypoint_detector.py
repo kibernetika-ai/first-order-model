@@ -49,7 +49,7 @@ class KPDetector(tf.keras.Model):
         # if self.scale_factor != 1:
         x = self.down(x)
 
-        feature_map = self.predictor(x)  # B, 35, 64, 64
+        feature_map = self.predictor(x)  # B, 64, 64, 35
         prediction = self.kp(feature_map)  # B, 58, 58, 10
 
         final_shape = tf.shape(prediction)  # B, 58, 58, 10

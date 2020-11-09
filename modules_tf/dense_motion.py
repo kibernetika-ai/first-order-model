@@ -62,7 +62,7 @@ class DenseMotionNetwork(layers.Layer):
         identity_grid = make_coordinate_grid((h, w), type=kp_source_value.dtype)
         # identity_grid = tf.expand_dims(tf.expand_dims(identity_grid, 0), 3)  # 1, h, w, 1, 2
         identity_grid = tf.reshape(identity_grid, [1, h, w, 1, 2])  # 1, 64, 64, 1, 2
-        coordinate_grid = identity_grid - tf.reshape(kp_driving_value, [bs, 1, 1, self.num_kp, 2])  # B, 1, 1, 10, 2
+        coordinate_grid = identity_grid - tf.reshape(kp_driving_value, [bs, 1, 1, self.num_kp, 2])  # B, 64, 64, 10, 2
 
         jacobian = tf.matmul(kp_source_jacobian, tf.linalg.inv(kp_driving_jacobian))
         jacobian = tf.expand_dims(tf.expand_dims(jacobian, 1), 1)  # B, 1, 1, 10, 2, 2
@@ -121,7 +121,7 @@ class DenseMotionNetwork(layers.Layer):
         # out_dict['sparse_deformed'] = deformed_source
 
         input = tf.concat([heatmap_representation, deformed_source], axis=-1)  # B, 64, 64, 11, 4
-        input = tf.reshape(input, [bs, h, w, -1])  # B, 44, 64, 64
+        input = tf.reshape(input, [bs, h, w, -1])  # B, 64, 64, 44
 
         prediction = self.hourglass(input)  # B, 64, 64, 108
 

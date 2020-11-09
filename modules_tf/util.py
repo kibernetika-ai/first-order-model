@@ -230,7 +230,7 @@ class AntiAliasInterpolation2d(layers.Layer):
         kernel = tf.reshape(kernel, [1, 1, *kernel.shape])
         kernel = tf.repeat(kernel, channels, 0)
 
-        self.kernel = tf.transpose(tf.constant(kernel, name='kernel'), [2, 3, 1, 0])
+        self.kernel = tf.Variable(tf.transpose(tf.constant(kernel, name='kernel'), [2, 3, 1, 0]), trainable=False)
         # self.register_buffer('weight', kernel)
         self.groups = channels
         self.scale = scale
