@@ -289,6 +289,13 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
                     )
                     summary_writer.flush()
 
+            if 10000 < step < 50000:
+                generator_full.kp_loss_weight = 0.5
+            if 50000 < step < 50000:
+                generator_full.kp_loss_weight = 0.25
+            if 100000 < step:
+                generator_full.kp_loss_weight = 0.125
+
             step_var.assign_add(1)
             if step != 0 and step % save_checkpoint == 0:
                 LOG.info('Saving model...')

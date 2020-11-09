@@ -116,6 +116,7 @@ class GeneratorFullModel(layers.Layer):
         self.disc_scales = self.discriminator.scales
         self.pyramid = ImagePyramid(self.scales, generator.num_channels)
         self.grad_tape = None
+        self.kp_loss_weight = 1.0
 
         self.loss_weights = train_params['loss_weights']
 
@@ -163,7 +164,7 @@ class GeneratorFullModel(layers.Layer):
             kp_driving_loss += tf.reduce_sum(kp_loss_koef - mins)
 
         kp_loss = kp_source_loss + kp_driving_loss
-        loss_values['kp_loss'] = kp_loss
+        loss_values['kp_loss'] = kp_loss * self.kp_loss_weight
 
         if sum(self.loss_weights['perceptual']) != 0:
             value_total = 0
