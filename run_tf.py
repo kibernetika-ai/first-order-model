@@ -34,6 +34,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=0)
     parser.add_argument("--lr", type=float)
     parser.add_argument("--disable-id-sampling", action='store_true')
+    parser.add_argument("--use-kp-loss", action='store_true', default=False)
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--num-kp", type=int, default=0)
     parser.add_argument("--checkpoint", default=None, help="path to checkpoint to restore")
@@ -85,6 +86,7 @@ def main():
         config['train_params']['lr_generator'] = opt.lr
         config['train_params']['lr_discriminator'] = opt.lr
         config['train_params']['lr_kp_detector'] = opt.lr
+    config['train_params']['use_kp_loss'] = opt.use_kp_loss
 
     config['train_params']['batch_size'] = opt.batch_size
     # config['model_params']['kp_detector_params']['use_landmarks'] = opt.use_landmarks
@@ -260,7 +262,7 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
             step = prev_step + i.numpy() + int(epoch * len(dataset) * dataset.repeats / train_params['batch_size'])
             losses, generated = train_step(x_source, x_driving)
 
-            if step % log_step == 0:
+            if step != prev_step and step % log_step == 0:
                 LOG.info(
                     f'Epoch {epoch + 1}, global step {step}: {", ".join([f"{k}={v}" for k, v in losses.items()])}'
                 )

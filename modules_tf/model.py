@@ -14,7 +14,7 @@ def vgg_19(input_tensor=None, input_shape=(None, None, 3)):
     outputs = []
     for layer_name in vgg19_feat_layers:
         outputs.append(vgg19.get_layer(layer_name).output)
-    model = tf.keras.Model(inputs=vgg19.input, outputs=outputs)
+    model = tf.keras.Model(inputs=vgg19.input, outputs=outputs, trainable=False)
 
     return model
 
@@ -118,6 +118,7 @@ class GeneratorFullModel(layers.Layer):
         self.grad_tape = None
         self.kp_loss_weight = 1.0
         self.bs = train_params['batch_size']
+        self.use_kp_loss = train_params['use_kp_loss']
 
         self.loss_weights = train_params['loss_weights']
 
@@ -147,25 +148,26 @@ class GeneratorFullModel(layers.Layer):
         pyramide_generated = self.pyramid(generated_prediction)
 
         # kp detector normalize loss
-        kp_source_loss = 0.
-        kp_driving_loss = 0.
-        kp_loss_koef = 0.7
-        for kp in kp_source_value:
-            distances = metric_learning.pairwise_distance(kp)
-            v, idx = tf.nn.top_k(-distances, 2)
-            mins = -v[:, 1]  # 10
-            # tf.print(mins)
-            kp_source_loss += tf.reduce_sum(kp_loss_koef - mins)
-        
-        for kp in kp_driving_value:
-            distances = metric_learning.pairwise_distance(kp)
-            v, idx = tf.nn.top_k(-distances, 2)
-            mins = -v[:, 1]  # 10
-            # tf.print(mins)
-            kp_driving_loss += tf.reduce_sum(kp_loss_koef - mins)
+        if self.use_kp_loss:
+            kp_source_loss = 0.
+            kp_driving_loss = 0.
+            kp_loss_koef = 0.7
+            for kp in kp_source_value:
+                distances = metric_learning.pairwise_distance(kp)
+                v, idx = tf.nn.top_k(-distances, 2)
+                mins = -v[:, 1]  # 10
+                # tf.print(mins)
+                kp_source_loss += tf.reduce_sum(kp_loss_koef - mins)
 
-        kp_loss = (kp_source_loss + kp_driving_loss) / self.bs
-        loss_values['kp_loss'] = kp_loss * self.kp_loss_weight
+            for kp in kp_driving_value:
+                distances = metric_learning.pairwise_distance(kp)
+                v, idx = tf.nn.top_k(-distances, 2)
+                mins = -v[:, 1]  # 10
+                # tf.print(mins)
+                kp_driving_loss += tf.reduce_sum(kp_loss_koef - mins)
+
+            kp_loss = (kp_source_loss + kp_driving_loss) / self.bs
+            loss_values['kp_loss'] = kp_loss * self.kp_loss_weight
 
         if sum(self.loss_weights['perceptual']) != 0:
             value_total = 0
