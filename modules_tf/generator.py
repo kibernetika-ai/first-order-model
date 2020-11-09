@@ -107,6 +107,7 @@ class OcclusionAwareGenerator(tf.keras.Model):
         # B, 256, 256, 64
         out = self.final(out)  # B, 256, 256, 3
         out = tf.nn.sigmoid(out)
+        # out = tf.nn.tanh(out)
 
         # output_dict["prediction"] = out
 

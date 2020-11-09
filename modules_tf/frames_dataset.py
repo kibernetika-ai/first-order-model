@@ -150,6 +150,10 @@ class FramesDataset(object):
             name = self.videos[idx]
             paths = glob.glob(os.path.join(self.root_dir, name, '*'), recursive=True)
             dir_paths = [p for p in paths if os.path.isdir(p)]
+            if len(dir_paths) == 0:
+                # regenerate
+                new_idx = np.random.randint(0, len(self))
+                return self[new_idx]
             path = np.random.choice(dir_paths)
         else:
             name = self.videos[idx]
@@ -162,10 +166,15 @@ class FramesDataset(object):
                 new_idx = np.random.randint(0, len(self))
                 return self[new_idx]
             frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2))
-            video_array = [
-                img_as_float32(cv2.cvtColor(cv2.imread(os.path.join(path, frames[idx])), cv2.COLOR_BGR2RGB))
-                for idx in frame_idx
-            ]
+            try:
+                video_array = [
+                    img_as_float32(cv2.cvtColor(cv2.imread(os.path.join(path, frames[idx])), cv2.COLOR_BGR2RGB))
+                    for idx in frame_idx
+                ]
+            except cv2.error:
+                # regenerate
+                new_idx = np.random.randint(0, len(self))
+                return self[new_idx]
             new_video = np.zeros([len(video_array), *self.frame_shape])
             for i, im in enumerate(video_array):
                 new_video[i] = cv2.resize(im, (self.frame_shape[1], self.frame_shape[0]))
@@ -185,6 +194,7 @@ class FramesDataset(object):
 
         if self.transform is not None:
             video_array = self.transform(video_array)
+            # video_array = np.stack(video_array) * 2 - 1
 
         # out = {}
         # if self.is_train:

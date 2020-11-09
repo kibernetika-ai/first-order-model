@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument("--enable-jacobian", action='store_true')
     parser.add_argument("--disable-jacobian", action='store_true')
     parser.add_argument("--epochs", type=int, default=0)
+    parser.add_argument("--lr", type=float)
     parser.add_argument("--disable-id-sampling", action='store_true')
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--num-kp", type=int, default=0)
@@ -80,6 +81,10 @@ def main():
         config['train_params']['num_repeats'] = opt.repeats
     if opt.disable_id_sampling:
         config['dataset_params']['id_sampling'] = False
+    if opt.lr:
+        config['train_params']['lr_generator'] = opt.lr
+        config['train_params']['lr_discriminator'] = opt.lr
+        config['train_params']['lr_kp_detector'] = opt.lr
 
     config['train_params']['batch_size'] = opt.batch_size
     # config['model_params']['kp_detector_params']['use_landmarks'] = opt.use_landmarks
@@ -209,7 +214,7 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
     summary_writer = tf.summary.create_file_writer(log_dir, flush_millis=60000)
 
     @tf.function
-    def train_step(x_source, x_driving, epoch, step):
+    def train_step(x_source, x_driving):
         with tf.GradientTape(persistent=True) as tape:
             generator_full.grad_tape = tape
             losses_generator, generated = generator_full((x_source, x_driving), training=True)
@@ -221,9 +226,8 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
                 losses_discriminator = discriminator_full(
                     (x_driving, generated['kp_driving_value'], generated['prediction'])
                 )
-                loss_values = [tf.reduce_mean(val) for val in losses_discriminator.values()]
-                disc_loss = tf.reduce_sum(loss_values)
-
+                loss_values_disc = [tf.reduce_mean(val) for val in losses_discriminator.values()]
+                disc_loss = tf.reduce_sum(loss_values_disc)
             else:
                 losses_discriminator = {}
 
@@ -250,7 +254,7 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
     for epoch in range(start_epoch, train_params['num_epochs']):
         for i, (x_source, x_driving) in input_fn.enumerate():
             step = prev_step + i.numpy() + int(epoch * len(dataset) * dataset.repeats / train_params['batch_size'])
-            losses, generated = train_step(x_source, x_driving, tf.constant(epoch), tf.constant(step))
+            losses, generated = train_step(x_source, x_driving)
 
             if step % log_step == 0:
                 LOG.info(
