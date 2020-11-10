@@ -163,13 +163,13 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
 
     input_fn = dataset.get_input_fn(batch_size)
     optimizer_generator = tf.keras.optimizers.Adam(
-        learning_rate=train_params['lr_generator'], beta_1=0.5, beta_2=0.999
+        learning_rate=train_params['lr_generator'],
     )
     optimizer_discriminator = tf.keras.optimizers.Adam(
-        learning_rate=train_params['lr_discriminator'], beta_1=0.5, beta_2=0.999
+        learning_rate=train_params['lr_discriminator'],
     )
     optimizer_kp_detector = tf.keras.optimizers.Adam(
-        learning_rate=train_params['lr_kp_detector'], beta_1=0.5, beta_2=0.999
+        learning_rate=train_params['lr_kp_detector'],
     )
 
     checkpoint = tf.train.Checkpoint(
@@ -226,7 +226,7 @@ def train(config, generator, discriminator, kp_detector, log_dir, dataset):
 
             if train_params['loss_weights']['generator_gan'] != 0:
                 losses_discriminator = discriminator_full(
-                    (x_driving, generated['kp_driving_value'], generated['prediction'])
+                    (x_driving, generated['kp_driving_value'], generated['prediction']), training=True
                 )
                 loss_values_disc = [tf.reduce_mean(val) for val in losses_discriminator.values()]
                 disc_loss = tf.reduce_sum(loss_values_disc)

@@ -101,7 +101,7 @@ class Transform(layers.Layer):
         return jacobian
 
 
-class GeneratorFullModel(layers.Layer):
+class GeneratorFullModel(tf.keras.Model):
     """
     Merge all generator related updates into single model for better multi-gpu usage
     """
@@ -237,7 +237,7 @@ class GeneratorFullModel(layers.Layer):
         return loss_values, generated
 
 
-class DiscriminatorFullModel(layers.Layer):
+class DiscriminatorFullModel(tf.keras.Model):
     """
     Merge all discriminator related updates into single model for better multi-gpu usage
     """
