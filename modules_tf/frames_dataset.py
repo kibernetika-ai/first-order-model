@@ -165,7 +165,7 @@ class FramesDataset(object):
             if num_frames < 2:
                 new_idx = np.random.randint(0, len(self))
                 return self[new_idx]
-            frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2))
+            frame_idx = np.sort(np.random.randint(1, num_frames, size=2))
             try:
                 video_array = [
                     img_as_float32(cv2.cvtColor(cv2.imread(os.path.join(path, frames[idx])), cv2.COLOR_BGR2RGB))
