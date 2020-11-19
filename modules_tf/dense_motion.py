@@ -52,7 +52,7 @@ class DenseMotionNetwork(layers.Layer):
         return heatmap
 
     @tf.function
-    def create_sparse_motions(self, source_image, kp_driving_value, kp_driving_jacobian,
+    def create_sparse_motions(self, source_image, kp_driving_value, kp_driving_jacobian_inv,
                               kp_source_value, kp_source_jacobian):
         """
         Eq 4. in the paper T_{s<-d}(z)
@@ -64,7 +64,7 @@ class DenseMotionNetwork(layers.Layer):
         identity_grid = tf.reshape(identity_grid, [1, h, w, 1, 2])  # 1, 64, 64, 1, 2
         coordinate_grid = identity_grid - tf.reshape(kp_driving_value, [bs, 1, 1, self.num_kp, 2])  # B, 64, 64, 10, 2
 
-        jacobian = tf.matmul(kp_source_jacobian, tf.linalg.inv(kp_driving_jacobian))
+        jacobian = tf.matmul(kp_source_jacobian, kp_driving_jacobian_inv)
         jacobian = tf.expand_dims(tf.expand_dims(jacobian, 1), 1)  # B, 1, 1, 10, 2, 2
         jacobian = tf.tile(jacobian, [1, h, w, 1, 1, 1])  # B, 64, 64, 10, 2, 2
         coordinate_grid = tf.matmul(jacobian, tf.expand_dims(coordinate_grid, -1))  # B, 64, 64, 10, 2, 1

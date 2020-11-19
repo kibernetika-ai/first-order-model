@@ -70,7 +70,8 @@ class OcclusionAwareGenerator(tf.keras.Model):
         return bilinear_sampler(inp, deformation[:, 0, :, :], deformation[:, 1, :, :])
 
     def call(self, inputs, training=None, mask=None):
-        source_image, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian = inputs
+        (source_image, kp_driving_value, kp_driving_jacobian_inv,
+         kp_source_value, kp_source_jacobian) = inputs
         # Encoding (downsampling) part
         out = self.first(source_image)
         for i in range(self.num_down_blocks):
@@ -78,17 +79,9 @@ class OcclusionAwareGenerator(tf.keras.Model):
             out = down_block(out)
 
         # Transforming feature representation according to deformation and occlusion
-        # output_dict = {}
         deformation, occlusion_map = self.dense_motion_network(
-            (source_image, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian)
+            (source_image, kp_driving_value, kp_driving_jacobian_inv, kp_source_value, kp_source_jacobian)
         )
-        # output_dict['mask'] = dense_motion['mask']
-        # output_dict['sparse_deformed'] = dense_motion['sparse_deformed']
-
-        # occlusion_map = dense_motion['occlusion_map']
-        # output_dict['occlusion_map'] = occlusion_map
-
-        # deformation = dense_motion['deformation']
         # out [B, 64, 64, 256]
         # deformation [B, 64, 64, 2]
         out = self.deform_input(out, deformation)  # B, 64, 64, 256
@@ -96,8 +89,6 @@ class OcclusionAwareGenerator(tf.keras.Model):
         if out.shape[1] != occlusion_map.shape[1] or out.shape[2] != occlusion_map.shape[2]:
             occlusion_map = resize_bilinear(occlusion_map, (out.shape[1:3]))
         out = out * occlusion_map
-
-        # output_dict["deformed"] = self.deform_input(source_image, deformation)
 
         # Decoding part
         out = self.bottleneck(out)  # B, 64, 64, 256
@@ -107,9 +98,6 @@ class OcclusionAwareGenerator(tf.keras.Model):
         # B, 256, 256, 64
         out = self.final(out)  # B, 256, 256, 3
         out = tf.nn.sigmoid(out)
-        # out = tf.nn.tanh(out)
-
-        # output_dict["prediction"] = out
 
         return out
 

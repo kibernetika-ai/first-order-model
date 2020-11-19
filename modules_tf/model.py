@@ -133,8 +133,9 @@ class GeneratorFullModel(tf.keras.Model):
         kp_driving_value, kp_driving_jacobian = self.kp_extractor(x_driving)
 
         generated = {}
+        kp_driving_jacobian_inv = tf.linalg.inv(kp_driving_jacobian)
         generated_prediction = self.generator(
-            (x_source, kp_driving_value, kp_driving_jacobian, kp_source_value, kp_source_jacobian)
+            (x_source, kp_driving_value, kp_driving_jacobian_inv, kp_source_value, kp_source_jacobian)
         )
         generated.update({
             'kp_source_value': kp_source_value,

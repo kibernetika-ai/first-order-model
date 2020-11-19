@@ -230,28 +230,24 @@ class AntiAliasInterpolation2d(layers.Layer):
         kernel = tf.reshape(kernel, [1, 1, *kernel.shape])
         kernel = tf.repeat(kernel, channels, 0)
 
-        self.kernel = tf.Variable(tf.transpose(tf.constant(kernel, name='kernel'), [2, 3, 1, 0]), trainable=False)
-        # self.register_buffer('weight', kernel)
+        kernel = tf.transpose(tf.constant(kernel, name='kernel'), [2, 3, 1, 0])
+        self.kernel = tf.Variable(tf.tile(kernel, [1, 1, 1, 1]), trainable=False)
+
         self.groups = channels
         self.scale = scale
-        self.skip_padding = False
-        self.skip_interpolate = False
+        # self.kernels = tf.split(self.kernel, self.groups, axis=3)
 
     def call(self, input, **kwargs):
         if self.scale == 1.0:
             return input
-        if self.skip_padding:
-            out = input
-        else:
-            out = tf.keras.backend.spatial_2d_padding(input, ((self.ka, self.kb), (self.ka, self.kb)))
-        out = tf.nn.conv2d(out, self.kernel, strides=1, padding='VALID')
-        if self.skip_interpolate:
-            return out
+
+        padded = tf.keras.backend.spatial_2d_padding(input, ((self.ka, self.kb), (self.ka, self.kb)))
+
+        # split & concat - to work on CPU
+        # out = tf.concat([tf.nn.conv2d(padded[:, :, :, i:i+1], self.kernels[i], strides=1, padding='VALID') for i in range(3)], axis=3)
+        out = tf.nn.conv2d(padded, self.kernel, strides=1, padding='VALID')
 
         size = (tf.cast(out.shape[1] * self.scale, tf.int32), tf.cast(out.shape[2] * self.scale, tf.int32))
-        # out = tf.image.resize(out, (64, 64), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
         out = resize_nearest_neighbor(out, size)
-        # out = tf.keras.backend.resize_images(out, 0.25, 0.25, 'channels_last', interpolation='nearest')
-        # out = self.interpolate(out)
 
         return out
