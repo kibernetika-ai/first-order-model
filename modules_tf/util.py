@@ -235,7 +235,7 @@ class AntiAliasInterpolation2d(layers.Layer):
 
         self.groups = channels
         self.scale = scale
-        # self.kernels = tf.split(self.kernel, self.groups, axis=3)
+        self.kernels = tf.split(self.kernel, self.groups, axis=3)
 
     def call(self, input, **kwargs):
         if self.scale == 1.0:
@@ -244,8 +244,12 @@ class AntiAliasInterpolation2d(layers.Layer):
         padded = tf.keras.backend.spatial_2d_padding(input, ((self.ka, self.kb), (self.ka, self.kb)))
 
         # split & concat - to work on CPU
-        # out = tf.concat([tf.nn.conv2d(padded[:, :, :, i:i+1], self.kernels[i], strides=1, padding='VALID') for i in range(3)], axis=3)
-        out = tf.nn.conv2d(padded, self.kernel, strides=1, padding='VALID')
+        splitted = tf.split(padded, 3, axis=3)
+        parts = []
+        for i in range(3):
+            parts.append(tf.nn.conv2d(splitted[i], self.kernels[i], strides=1, padding='VALID'))
+        out = tf.concat([*parts], axis=3)
+        # out = tf.nn.conv2d(padded, self.kernel, strides=1, padding='VALID')
 
         size = (tf.cast(out.shape[1] * self.scale, tf.int32), tf.cast(out.shape[2] * self.scale, tf.int32))
         out = resize_nearest_neighbor(out, size)
