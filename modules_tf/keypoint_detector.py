@@ -33,6 +33,7 @@ class KPDetector(tf.keras.Model):
         # if self.scale_factor != 1:
         self.down = AntiAliasInterpolation2d(num_channels, self.scale_factor)
 
+    @tf.function
     def gaussian2kp(self, heatmap):
         """
         Extract the mean and from a heatmap
@@ -41,7 +42,8 @@ class KPDetector(tf.keras.Model):
         heatmap = tf.expand_dims(heatmap, -1)  # B, 58, 58, 10, 1
         grid = tf.expand_dims(make_coordinate_grid(shape[1:3], heatmap.dtype), 0)  # 1, 58, 58, 2
         grid = tf.expand_dims(grid, 3)  # 1, 58, 58, 1, 2
-        value = tf.reduce_sum(heatmap * grid, axis=[1, 2])  # B, 10, 2
+        value = tf.reduce_sum(heatmap * grid, axis=1)  # B, 58, 10, 2
+        value = tf.reduce_sum(value, axis=1)  # B, 10, 2
 
         return value
 

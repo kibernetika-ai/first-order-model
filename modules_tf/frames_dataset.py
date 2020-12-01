@@ -218,6 +218,6 @@ class FramesDataset(object):
         dataset = tf.data.Dataset.from_generator(
             self.generator,
             (tf.float32, tf.float32),
-            (tf.TensorShape([None, None, 3]), tf.TensorShape([None, None, 3]))
+            (tf.TensorShape([256, 256, 3]), tf.TensorShape([256, 256, 3]))
         )
         return dataset.repeat(self.repeats).padded_batch(batch_size, drop_remainder=True).prefetch(batch_size * 2)

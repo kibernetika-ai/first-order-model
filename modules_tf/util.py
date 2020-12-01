@@ -3,6 +3,7 @@ from tensorflow.keras import layers
 from tensorflow.python.ops.gen_image_ops import resize_nearest_neighbor
 
 
+@tf.function
 def kp2gaussian(kp_value, spatial_size, kp_variance):
     """
     Transform a keypoint into gaussian like representation
@@ -252,6 +253,7 @@ class AntiAliasInterpolation2d(layers.Layer):
         # out = tf.nn.conv2d(padded, self.kernel, strides=1, padding='VALID')
 
         size = (tf.cast(out.shape[1] * self.scale, tf.int32), tf.cast(out.shape[2] * self.scale, tf.int32))
+        # out = tf.image.resize(out, size, method=tf.image.ResizeMethod.BILINEAR)
         out = resize_nearest_neighbor(out, size)
 
         return out
