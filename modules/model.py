@@ -149,8 +149,8 @@ class GeneratorFullModel(torch.nn.Module):
                 self.vgg = self.vgg.cuda()
 
     def forward(self, x):
-        kp_source = self.kp_extractor(x['source'])
-        kp_driving = self.kp_extractor(x['driving'])
+        kp_source = self.kp_extractor(x['source'],x['source_upoints'])
+        kp_driving = self.kp_extractor(x['driving'],x['driving_upoints'])
 
         generated = self.generator(x['source'], kp_source=kp_source, kp_driving=kp_driving)
         generated.update({'kp_source': kp_source, 'kp_driving': kp_driving})

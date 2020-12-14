@@ -63,13 +63,8 @@ class KPDetector(nn.Module):
 
     def __init__(self, block_expansion, num_kp, num_channels, max_features,
                  num_blocks, temperature, estimate_jacobian=False, scale_factor=1,
-                 single_jacobian_map=False, pad=0, use_landmarks=False):
+                 single_jacobian_map=False, pad=0):
         super(KPDetector, self).__init__()
-
-        self.use_landmarks = use_landmarks
-        if use_landmarks:
-            num_kp = 68
-            self.fan = Landmarks()#.requires_grad_(False)
 
         self.predictor = Hourglass(block_expansion, in_features=num_channels,
                                    max_features=max_features, num_blocks=num_blocks)
@@ -111,29 +106,20 @@ class KPDetector(nn.Module):
 
         return kp
 
-    def forward(self, x):
+    def forward(self, x,upoints):
         x_orig = x
         if self.scale_factor != 1:
             x = self.down(x)
 
         feature_map = self.predictor(x)  # B, 35, 64, 64
-        if not self.use_landmarks:
-            prediction = self.kp(feature_map)  # B, 10, 58, 58
+        prediction = self.kp(feature_map)  # B, 10, 58, 58
 
-            final_shape = prediction.shape
-            heatmap = prediction.view(final_shape[0], final_shape[1], -1)
-            heatmap = F.softmax(heatmap / self.temperature, dim=2)
-            heatmap = heatmap.view(*final_shape)  # B, 10, 1, 58, 58
-            out = self.gaussian2kp(heatmap)
-        else:
-            heatmap, points = self.fan(x_orig)  # heatmap should be [0, 1], points [-1, 1]
-
-            out = {'value': points}
-            #  heatmap B, 68, 64, 64
-            #  points B, 68, 2
-            # feature_map = heatmap
-            final_shape = heatmap.shape
-            # final_shape = torch.Size([heatmap.shape[0], self.num_jacobian_maps, 58, 58])
+        final_shape = prediction.shape
+        heatmap = prediction.view(final_shape[0], final_shape[1], -1)
+        heatmap = F.softmax(heatmap / self.temperature, dim=2)
+        heatmap = heatmap.view(*final_shape)  # B, 10, 1, 58, 58
+        #out = self.gaussian2kp(heatmap)
+        out = {'value': upoints}
         if self.jacobian is not None:
             jacobian_map = self.jacobian(feature_map)
             jacobian_map = jacobian_map.reshape(final_shape[0], self.num_jacobian_maps, 4, final_shape[2],

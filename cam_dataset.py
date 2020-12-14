@@ -12,6 +12,26 @@ LOG = logging.getLogger(__name__)
 
 
 
+def points_from_landmark(land):
+    points = []
+    points.append(land[0])
+    points.append(land[8])
+    points.append(land[16])
+
+    points.append(land[36])#y left
+    points.append(land[45])#yright
+
+    points.append(land[60])#mouse left
+    points.append(land[64])#mouse right
+
+    points.append(land[29])#nose
+
+
+    points.append(land[19])#brow
+    points.append(land[24])#brow
+
+    return np.array(points,np.float32)
+
 class CamDataset(Dataset):
     """Face Landmarks dataset."""
 
@@ -89,10 +109,16 @@ class CamDataset(Dataset):
         f1 = best_land
         f2 = random.randint(1, len(frames) - 1)
         box = boxes[f2]
+        land_out = lands[f2][:,:2].copy()
         x1 = max(0, box[0] - (box[2] - box[0]) / kf)
         x2 = min(1, box[2] + (box[2] - box[0]) / kf)
         y1 = max(0, box[1] - (box[3] - box[1]) / kf)
         y2 = min(1, box[3] + (box[3] - box[1]) / kf)
+        land_out[:, 0] = (land_out[:, 0] - x1) / (x2 - x1)
+        land_out[:, 1] = (land_out[:, 1] - y1) / (y2 - y1)
+        land_out = np.clip(land_out, 0, 1)
+        land_out = points_from_landmark(land_out)
+
         img_out = cv2.imread(os.path.join(f, f'{frames[f2]}.jpg'))
         x1 = int(x1 * img_out.shape[1])
         x2 = int(x2 * img_out.shape[1])
@@ -107,6 +133,13 @@ class CamDataset(Dataset):
         x2 = min(1, box[2] + (box[2] - box[0]) / kf)
         y1 = max(0, box[1] - (box[3] - box[1]) / kf)
         y2 = min(1, box[3] + (box[3] - box[1]) / kf)
+
+        land_in = lands[f1][:,:2].copy()
+        land_in[:, 0] = (land_in[:, 0] - x1) / (x2 - x1)
+        land_in[:, 1] = (land_in[:, 1] - y1) / (y2 - y1)
+        land_in = np.clip(land_in, 0, 1)
+        land_in = points_from_landmark(land_in)
+
         x1 = int(x1 * img_in.shape[1])
         x2 = int(x2 * img_in.shape[1])
         y1 = int(y1 * img_in.shape[0])
@@ -116,7 +149,9 @@ class CamDataset(Dataset):
         img_in = img_as_float32(img_in)
         out = {
             'driving': img_out.transpose((2, 0, 1)),
+            'driving_upoints': land_out,
             'source': img_in.transpose((2, 0, 1)),
+            'source_upoints': land_in,
         }
         return out
 
