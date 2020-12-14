@@ -64,18 +64,15 @@ if __name__ == "__main__":
         config['train_params']['num_repeats'] = opt.repeats
 
     config['train_params']['batch_size'] = opt.batch_size
-    config['model_params']['kp_detector_params']['use_landmarks'] = opt.use_landmarks
-    if not opt.use_landmarks:
-        config['train_params']['loss_weights']['equivariance_jacobian'] = 10
-        config['model_params']['common_params']['estimate_jacobian'] = True
+    #config['model_params']['kp_detector_params']['use_landmarks'] = opt.use_landmarks
+    config['train_params']['loss_weights']['equivariance_jacobian'] = 10
+    config['model_params']['common_params']['estimate_jacobian'] = True
     if opt.disable_jacobian:
         config['model_params']['common_params']['estimate_jacobian'] = False
     if opt.enable_jacobian:
         config['model_params']['common_params']['estimate_jacobian'] = True
 
-    if opt.use_landmarks:
-        config['model_params']['common_params']['num_kp'] = 68
-    elif opt.num_kp:
+    if opt.num_kp:
         config['model_params']['common_params']['num_kp'] = opt.num_kp
 
     generator = OcclusionAwareGenerator(**config['model_params']['generator_params'],
