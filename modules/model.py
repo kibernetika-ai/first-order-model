@@ -192,7 +192,7 @@ class GeneratorFullModel(torch.nn.Module):
                         value_total += self.loss_weights['feature_matching'][i] * value
                     loss_values['feature_matching'] = value_total
 
-        if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) != 0:
+        if (self.loss_weights['equivariance_value'] + self.loss_weights['equivariance_jacobian']) < 1000:
             transform = Transform(x['driving'].shape[0], **self.train_params['transform_params'])
             transformed_frame = transform.transform_frame(x['driving'])
             transformed_kp = self.kp_extractor(transformed_frame)
