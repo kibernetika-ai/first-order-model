@@ -118,6 +118,7 @@ class CamDataset(Dataset):
         land_out[:, 1] = (land_out[:, 1] - y1) / (y2 - y1)
         land_out = np.clip(land_out, 0, 1)
         land_out = points_from_landmark(land_out)
+        land_out = land_out - 0.5
 
         img_out = cv2.imread(os.path.join(f, f'{frames[f2]}.jpg'))
         x1 = int(x1 * img_out.shape[1])
@@ -139,6 +140,7 @@ class CamDataset(Dataset):
         land_in[:, 1] = (land_in[:, 1] - y1) / (y2 - y1)
         land_in = np.clip(land_in, 0, 1)
         land_in = points_from_landmark(land_in)
+        land_in = land_in - 0.5
 
         x1 = int(x1 * img_in.shape[1])
         x2 = int(x2 * img_in.shape[1])
